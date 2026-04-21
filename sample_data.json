@@ -1,0 +1,92 @@
+[
+  {
+    "device_name": "iPhone-12-John",
+    "user_email": "john.doe@company.com",
+    "platform": "iOS",
+    "risk_level": "Low",
+    "last_checkin": "2025-07-31T10:30:00Z",
+    "os_version": "iOS 16.5.1",
+    "compliance_status": "Compliant"
+  },
+  {
+    "device_name": "Galaxy-S23-Sarah",
+    "user_email": "sarah.wilson@company.com",
+    "platform": "Android",
+    "risk_level": "Medium",
+    "last_checkin": "2025-07-30T15:45:00Z",
+    "os_version": "Android 13",
+    "compliance_status": "Non-Compliant"
+  },
+  {
+    "device_name": "MacBook-Pro-Mike",
+    "user_email": "mike.johnson@company.com",
+    "platform": "macOS",
+    "risk_level": "High",
+    "last_checkin": "2025-07-29T09:15:00Z",
+    "os_version": "macOS 13.4.1",
+    "compliance_status": "Compliant"
+  },
+  {
+    "device_name": "Surface-Laptop-Emma",
+    "user_email": "emma.davis@company.com",
+    "platform": "Windows",
+    "risk_level": "Low",
+    "last_checkin": "2025-07-31T08:20:00Z",
+    "os_version": "Windows 11 22H2",
+    "compliance_status": "Compliant"
+  },
+  {
+    "device_name": "iPad-Air-Alex",
+    "user_email": "alex.brown@company.com",
+    "platform": "iOS",
+    "risk_level": "Critical",
+    "last_checkin": "2025-07-25T14:00:00Z",
+    "os_version": "iOS 15.7.8",
+    "compliance_status": "Non-Compliant"
+  },
+  {
+    "device_name": "Pixel-7-Chris",
+    "user_email": "chris.martinez@company.com",
+    "platform": "Android",
+    "risk_level": "Medium",
+    "last_checkin": "2025-07-31T11:00:00Z",
+    "os_version": "Android 14",
+    "compliance_status": "Compliant"
+  },
+  {
+    "device_name": "ThinkPad-Lisa",
+    "user_email": "lisa.anderson@company.com",
+    "platform": "Windows",
+    "risk_level": "High",
+    "last_checkin": "2025-07-28T16:30:00Z",
+    "os_version": "Windows 10 21H2",
+    "compliance_status": "Non-Compliant"
+  },
+  {
+    "device_name": "iPhone-14-David",
+    "user_email": "david.garcia@company.com",
+    "platform": "iOS",
+    "risk_level": "Low",
+    "last_checkin": "2025-07-31T12:45:00Z",
+    "os_version": "iOS 17.0.2",
+    "compliance_status": "Compliant"
+  },
+  {
+    "device_name": "Galaxy-Tab-Rachel",
+    "user_email": "rachel.thomas@company.com",
+    "platform": "Android",
+    "risk_level": "Medium",
+    "last_checkin": "2025-07-30T13:20:00Z",
+    "os_version": "Android 13",
+    "compliance_status": "Compliant"
+  },
+  {
+    "device_name": "MacBook-Air-Kevin",
+    "user_email": "kevin.white@company.com",
+    "platform": "macOS",
+    "risk_level": "Low",
+    "last_checkin": "2025-07-31T07:30:00Z",
+    "os_version": "macOS 13.5.2",
+    "compliance_status": "Compliant"
+  }
+]
