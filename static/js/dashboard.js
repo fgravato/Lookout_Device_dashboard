@@ -281,7 +281,7 @@ class Dashboard {
         this.showLoading(true);
 
         try {
-            const response = await fetch(`/api/refresh?type=${type}`);
+            const response = await fetch(`/api/refresh?type=${type}`, { method: 'POST' });
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
