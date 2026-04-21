@@ -1,0 +1,49 @@
+{
+  "tenants": [
+    {
+      "tenant_id": "tenant_1",
+      "tenant_name": "Company A - InTune MDM",
+      "mdm_provider": "Microsoft InTune",
+      "mdm_identifier": "intune-companya",
+      "lookout_application_key": "your-lookout-api-key-here",
+      "description": "Primary tenant for Company A using InTune",
+      "enabled": true
+    },
+    {
+      "tenant_id": "tenant_2",
+      "tenant_name": "Company B - Jamf MDM",
+      "mdm_provider": "Jamf Pro",
+      "mdm_identifier": "jamf-companyb",
+      "lookout_application_key": "your-second-lookout-api-key-here",
+      "description": "Secondary tenant for Company B using Jamf",
+      "enabled": true
+    },
+    {
+      "tenant_id": "tenant_3",
+      "tenant_name": "Company C - Workspace ONE",
+      "mdm_provider": "VMware Workspace ONE",
+      "mdm_identifier": "ws1-companyc",
+      "lookout_application_key": "your-third-lookout-api-key-here",
+      "description": "Third tenant for Company C using Workspace ONE",
+      "enabled": true
+    },
+    {
+      "tenant_id": "tenant_4",
+      "tenant_name": "Company D - MobileIron",
+      "mdm_provider": "MobileIron",
+      "mdm_identifier": "mobileiron-companyd",
+      "lookout_application_key": "your-fourth-lookout-api-key-here",
+      "description": "Fourth tenant for Company D using MobileIron",
+      "enabled": false
+    },
+    {
+      "tenant_id": "tenant_5",
+      "tenant_name": "Company E - Google Workspace",
+      "mdm_provider": "Google Workspace",
+      "mdm_identifier": "google-companye",
+      "lookout_application_key": "your-fifth-lookout-api-key-here",
+      "description": "Fifth tenant for Company E using Google Workspace",
+      "enabled": true
+    }
+  ]
+}

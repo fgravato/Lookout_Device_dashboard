@@ -1,0 +1,453 @@
+/* Custom styles for Lookout MRA Dashboard - Styled to match Lookout Console */
+
+:root {
+    --brand-green: #00d084;
+    /* Vibrant Lookout Green */
+    --brand-dark: #2c3135;
+    /* Sidebar Dark */
+    --brand-darker: #1e2124;
+    /* Sidebar Darker/Active */
+    --main-bg: #f5f7fa;
+    /* Light grey background */
+    --text-primary: #333333;
+    --text-secondary: #6c757d;
+    --border-color: #e9ecef;
+    --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+
+    /* Risk Colors */
+    --risk-critical: #dc3545;
+    --risk-high: #dc3545;
+    --risk-medium: #ffc107;
+    --risk-low: #00d084;
+    --risk-secure: #00d084;
+}
+
+body {
+    background-color: var(--main-bg);
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    color: var(--text-primary);
+    overflow-x: hidden;
+}
+
+/* --- Layout Structure --- */
+.dashboard-container {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* Sidebar Styles */
+.sidebar {
+    width: 250px;
+    background-color: var(--brand-dark);
+    color: #fff;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    height: 100vh;
+    z-index: 1000;
+    transition: all 0.3s;
+}
+
+.sidebar-header {
+    padding: 1.5rem 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    border-left: 3px solid transparent;
+    /* Align with sidebar links */
+}
+
+.sidebar-brand {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #fff;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+}
+
+.sidebar-brand i {
+    color: var(--brand-green);
+    margin-right: 0.5rem;
+    font-size: 1.5rem;
+}
+
+.sidebar-menu {
+    list-style: none;
+    padding: 1rem 0;
+    margin: 0;
+    flex-grow: 1;
+    display: flex;
+    /* Ensure flex container properties apply */
+    flex-direction: column;
+    /* Force vertical stacking to override Bootstrap .nav */
+    justify-content: flex-start;
+    /* Pack items at the top */
+}
+
+.sidebar-menu li {
+    margin-bottom: 0.25rem;
+    width: 100%;
+    /* Ensure full width */
+}
+
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1.5rem;
+    color: rgba(255, 255, 255, 0.7);
+    text-decoration: none;
+    transition: all 0.2s;
+    border-left: 3px solid transparent;
+    cursor: pointer;
+}
+
+.sidebar-link:hover {
+    color: #fff;
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-link.active {
+    color: #fff;
+    background-color: var(--brand-darker);
+    border-left-color: var(--brand-green);
+}
+
+.sidebar-link.sidebar-grayed {
+    color: rgba(255, 255, 255, 0.25) !important;
+    cursor: default !important;
+    pointer-events: none !important;
+    opacity: 0.5;
+}
+
+.sidebar-link i {
+    width: 24px;
+    margin-right: 10px;
+    text-align: center;
+}
+
+.sidebar-footer {
+    padding: 1rem 1.5rem;
+    /* Match sidebar-link horizontal padding */
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-left: 3px solid transparent;
+    /* Align with sidebar links */
+}
+
+/* Main Content Area */
+.main-content {
+    flex-grow: 1;
+    margin-left: 250px;
+    padding: 1.5rem;
+    background-color: var(--main-bg);
+}
+
+/* Top Header (Page Title Area) */
+.page-header {
+    background-color: #fff;
+    padding: 1rem 1.5rem;
+    margin: -1.5rem -1.5rem 1.5rem -1.5rem;
+    /* Stretch full width */
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.page-title {
+    font-size: 1.25rem;
+    font-weight: 500;
+    margin: 0;
+    color: var(--text-primary);
+}
+
+/* --- Component Styles --- */
+
+/* Cards */
+.card {
+    border: none;
+    border-radius: 4px;
+    background-color: #fff;
+    box-shadow: var(--card-shadow);
+    margin-bottom: 1.5rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* No hover lift by default for all cards to look pro/static, but interactive ones can rely on .stats-card */
+
+.card-header {
+    background-color: #fff;
+    border-bottom: 1px solid var(--border-color);
+    padding: 1rem 1.25rem;
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+}
+
+.card-body {
+    padding: 1.25rem;
+}
+
+/* Stats Cards (Interactive) */
+.stats-card {
+    cursor: pointer;
+    border-top: 4px solid transparent;
+    /* Prepare for active state */
+}
+
+.stats-card:hover {
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+}
+
+.stats-card .card-title {
+    font-size: 2.5rem;
+    font-weight: 300;
+    margin-bottom: 0.25rem;
+}
+
+.stats-card .card-text {
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    color: var(--text-secondary) !important;
+}
+
+/* Active Filter State for Stats Cards */
+.stats-card.active[data-filter="all"] {
+    border-top-color: var(--text-secondary);
+}
+
+.stats-card.active[data-filter="low"] {
+    border-top-color: var(--risk-low);
+}
+
+.stats-card.active[data-filter="medium"] {
+    border-top-color: var(--risk-medium);
+}
+
+.stats-card.active[data-filter="high"] {
+    border-top-color: var(--risk-high);
+}
+
+
+/* Buttons */
+.btn {
+    border-radius: 4px;
+    font-weight: 500;
+    padding: 0.4rem 1rem;
+    transition: all 0.2s;
+    text-transform: none;
+    /* Reset if needed */
+}
+
+.btn-primary {
+    background-color: var(--brand-green);
+    border-color: var(--brand-green);
+    color: #fff;
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+    background-color: #00b371;
+    border-color: #00b371;
+}
+
+.btn-outline-primary {
+    color: var(--brand-green);
+    border-color: var(--brand-green);
+}
+
+.btn-outline-primary:hover {
+    background-color: var(--brand-green);
+    color: #fff;
+}
+
+/* Secondary/Action buttons */
+.btn-secondary {
+    background-color: #6c757d;
+    border-color: #6c757d;
+}
+
+/* Success button - typically used for positive actions */
+.btn-success {
+    background-color: var(--brand-green);
+    border-color: var(--brand-green);
+}
+
+
+/* Table Styling */
+.table {
+    margin-bottom: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.table th {
+    background-color: #fff;
+    border-bottom: 2px solid var(--border-color);
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    padding: 1rem 0.75rem;
+}
+
+.table td {
+    border-bottom: 1px solid var(--border-color);
+    padding: 1rem 0.75rem;
+    vertical-align: middle;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.table-hover tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+
+/* --- Filter Sidebar (Now just a filter panel) --- */
+/* Since we have a main sidebar, the filters might stay on the side of the content or move to top.
+   For now, we'll keep them as a panel in the grid but style them cleanly. */
+
+.filter-panel {
+    background-color: #fff;
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* --- Risk & Status Colors Utilities --- */
+.text-success,
+.risk-secure,
+.risk-low {
+    color: var(--risk-low) !important;
+}
+
+.text-warning,
+.risk-medium {
+    color: var(--risk-medium) !important;
+}
+
+.text-danger,
+.risk-high,
+.risk-critical {
+    color: var(--risk-high) !important;
+}
+
+/* Status Indicators */
+.status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+}
+
+.status-indicator.online {
+    background-color: var(--risk-low);
+}
+
+.status-indicator.offline {
+    background-color: #adb5bd;
+}
+
+/* Grey for offline */
+.status-indicator.warning {
+    background-color: var(--risk-medium);
+}
+
+
+/* --- Responsive Mobile Overrides --- */
+@media (max-width: 900px) {
+    .sidebar {
+        width: 60px;
+        /* Collapsed width */
+        overflow: hidden;
+    }
+
+    .sidebar:hover {
+        width: 250px;
+        /* Expand on hover */
+    }
+
+    .sidebar-brand span,
+    .sidebar-link span {
+        display: none;
+        /* Hide text */
+    }
+
+    .sidebar:hover .sidebar-brand span,
+    .sidebar:hover .sidebar-link span {
+        display: inline;
+    }
+
+    .main-content {
+        margin-left: 60px;
+    }
+}
+
+@media (max-width: 576px) {
+    .sidebar {
+        display: none;
+        /* Hide sidebar completely or use a hamburger */
+    }
+
+    .main-content {
+        margin-left: 0;
+        padding: 1rem;
+    }
+}
+
+/* --- Platform Icons --- */
+.platform-icon {
+    width: 18px;
+    height: 18px;
+    color: var(--text-secondary);
+}
+
+
+/* --- Other Utils --- */
+.loading-overlay {
+    background-color: rgba(255, 255, 255, 0.9);
+}
+
+/* Spinner color match */
+.spinner-border.text-primary {
+    color: var(--brand-green) !important;
+}
+
+/* Nav Tabs override if still used, or just hide them if switching to Sidebar */
+.nav-tabs .nav-link {
+    color: var(--text-secondary);
+    border: none;
+    border-bottom: 2px solid transparent;
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--brand-green);
+    border-bottom: 2px solid var(--brand-green);
+    font-weight: 600;
+}
+
+/* Add some spacing for the footer/copyright if exists */
+.footer {
+    margin-top: 3rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+/* Scrollbar styling for sidebar */
+.sidebar::-webkit-scrollbar {
+    width: 5px;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}

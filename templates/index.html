@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lookout MRA Device Dashboard</title>
+    <!-- Google Fonts: Roboto -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/dashboard.css') }}?v=3" rel="stylesheet">
+</head>
+
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <a href="#" class="sidebar-brand">
+                    <img src="https://mtp.lookout.com/images/logo-horizontal-inverted.1a0d31f019a01a68d7b1.svg"
+                        alt="Lookout" style="height: 36px;">
+                </a>
+            </div>
+            <ul class="sidebar-menu nav" id="sidebarTabs" role="tablist">
+                <li>
+                    <a class="sidebar-link active" id="devices-tab" data-bs-toggle="tab" data-bs-target="#devices"
+                        type="button" role="tab">
+                        <i class="fas fa-mobile-alt"></i>
+                        <span>Devices</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="sidebar-link" id="cve-tab" data-bs-toggle="tab" data-bs-target="#cve-scanner"
+                        type="button" role="tab">
+                        <i class="fas fa-bug"></i>
+                        <span>Vulnerabilities</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="sidebar-link sidebar-grayed" href="#">
+                        <i class="fas fa-chart-pie"></i>
+                        <span>Issues</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="sidebar-link sidebar-grayed" href="#">
+                        <i class="fas fa-th"></i>
+                        <span>Apps</span>
+                    </a>
+                </li>
+            </ul>
+            <div class="sidebar-footer">
+                <div class="small text-muted"><i class="fas fa-user-circle me-2"></i>Admin User</div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Page Header -->
+            <div class="page-header">
+                <h1 class="page-title">Mobile Endpoint Security Dashboard</h1>
+                <div class="d-flex gap-2 align-items-center">
+                    <span class="text-muted small me-3">
+                        Last updated: <span id="lastUpdateTime">Never</span>
+                    </span>
+                    <button class="btn btn-primary" id="fullRefreshBtn">
+                        <i class="fas fa-sync-alt me-1"></i>Full Refresh
+                    </button>
+                    <button class="btn btn-outline-primary" id="deltaRefreshBtn">
+                        <i class="fas fa-plus-circle me-1"></i>Check Updates
+                    </button>
+                </div>
+            </div>
+
+            <!-- Content Container -->
+            <div class="container-fluid p-0">
+                <div class="tab-content" id="dashboardTabContent">
+                    <!-- Devices Tab -->
+                    <div class="tab-pane fade show active" id="devices" role="tabpanel">
+                        <div class="row">
+                            <!-- Filters Sidebar -->
+                            <div class="col-md-3">
+                                <div class="card">
+                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                        <h5 class="mb-0">
+                                            <i class="fas fa-filter me-2"></i>Filters
+                                        </h5>
+                                        <div class="d-flex gap-2">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="scrubEmailToggle">
+                                                <label class="form-check-label" for="scrubEmailToggle">
+                                                    Scrub Email
+                                                </label>
+                                            </div>
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="groupViewToggle">
+                                                <label class="form-check-label" for="groupViewToggle">
+                                                    Group View
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Search</label>
+                                            <input type="text" class="form-control" id="searchInput"
+                                                placeholder="Search devices...">
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="form-label">Vulnerability (CVE)</label>
+                                            <input type="text" class="form-control" id="vulnerabilityInput"
+                                                placeholder="e.g., CVE-2022-36934">
+                                            <div class="form-text">Enter a CVE and press Enter to filter devices
+                                                affected by this vulnerability</div>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="form-label">Platform</label>
+                                            <select class="form-select" id="platformFilter">
+                                                <option value="">All Platforms</option>
+                                                <option value="ios">iOS</option>
+                                                <option value="android">Android</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="form-label">Risk Level</label>
+                                            <select class="form-select" id="riskLevelFilter">
+                                                <option value="">All Risk Levels</option>
+                                                <option value="secure">Secure</option>
+                                                <option value="low">Low</option>
+                                                <option value="medium">Medium</option>
+                                                <option value="high">High</option>
+                                                <option value="critical">Critical</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="form-label">OS Version</label>
+                                            <input type="text" class="form-control" id="osVersionFilter"
+                                                placeholder="e.g., ios 17.4.1, android 10">
+                                            <div class="form-text">Filter by OS version (partial matches supported)
+                                            </div>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="form-label">Connection Status</label>
+                                            <select class="form-select" id="daysFilter">
+                                                <option value="">All Devices</option>
+                                                <option value="connected">Connected (0-1 days)</option>
+                                                <option value="recent">Recent (2-7 days)</option>
+                                                <option value="stale">Stale (8-30 days)</option>
+                                                <option value="disconnected">Disconnected (30+ days)</option>
+                                                <option value="very_stale">Very Stale (90+ days)</option>
+                                                <option value="never_connected">Never Connected</option>
+                                            </select>
+                                        </div>
+
+                                        <!-- Multi-Tenant Filters -->
+                                        <div class="mb-3" id="tenantFilterGroup" style="display: none;">
+                                            <label class="form-label">
+                                                <i class="fas fa-building me-1"></i>Tenant / MDM
+                                            </label>
+                                            <select class="form-select" id="tenantFilter">
+                                                <option value="">All Tenants</option>
+                                            </select>
+                                            <div class="form-text" id="tenantFilterHint">Filter devices by tenant or MDM
+                                                provider</div>
+                                        </div>
+
+                                        <div class="mb-3" id="mdmProviderFilterGroup" style="display: none;">
+                                            <label class="form-label">
+                                                <i class="fas fa-server me-1"></i>MDM Provider
+                                            </label>
+                                            <select class="form-select" id="mdmProviderFilter">
+                                                <option value="">All MDM Providers</option>
+                                            </select>
+                                        </div>
+
+                                        <button class="btn btn-secondary w-100" id="clearFilters">
+                                            <i class="fas fa-times me-1"></i>Clear Filters
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="card mt-3">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Cache Status</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-2">
+                                            <small class="text-muted">Cache Age:</small>
+                                            <div id="cacheAge">Unknown</div>
+                                        </div>
+                                        <div class="mb-2">
+                                            <small class="text-muted">API Response:</small>
+                                            <div id="apiResponseTime">Unknown</div>
+                                        </div>
+                                        <button class="btn btn-outline-danger btn-sm w-100" id="clearCacheBtn">
+                                            <i class="fas fa-trash me-1"></i>Clear Cache
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="card mt-3">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Export</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <button class="btn btn-success w-100" id="exportBtn">
+                                            <i class="fas fa-file-excel me-1"></i>Export to Excel
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Main Content -->
+                            <div class="col-md-9">
+                                <!-- Stats Cards -->
+                                <div class="row mb-4">
+                                    <div class="col-md-3">
+                                        <div class="card text-center stats-card" data-filter="all" role="button"
+                                            tabindex="0" title="Click to show all devices">
+                                            <div class="card-body">
+                                                <h5 class="card-title" id="totalDevices">-</h5>
+                                                <p class="card-text text-muted">Total Devices</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="card text-center stats-card" data-filter="low" role="button"
+                                            tabindex="0" title="Click to show secure/low risk devices">
+                                            <div class="card-body">
+                                                <h5 class="card-title text-success" id="lowRisk">-</h5>
+                                                <p class="card-text text-muted">Secure/Low Risk</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="card text-center stats-card" data-filter="medium" role="button"
+                                            tabindex="0" title="Click to show medium risk devices">
+                                            <div class="card-body">
+                                                <h5 class="card-title text-warning" id="mediumRisk">-</h5>
+                                                <p class="card-text text-muted">Medium Risk</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="card text-center stats-card" data-filter="high" role="button"
+                                            tabindex="0" title="Click to show high/critical risk devices">
+                                            <div class="card-body">
+                                                <h5 class="card-title text-danger" id="highRisk">-</h5>
+                                                <p class="card-text text-muted">High/Critical Risk</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Devices Table -->
+                                <div class="card">
+                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                        <h5 class="mb-0">Devices</h5>
+                                        <div>
+                                            <span id="loadingSpinner"
+                                                class="spinner-border spinner-border-sm text-primary d-none"
+                                                role="status">
+                                                <span class="visually-hidden">Loading...</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="table-responsive">
+                                            <table class="table table-hover" id="devicesTable">
+                                                <thead>
+                                                    <tr>
+                                                        <th class="sortable" data-sort="device_name">
+                                                            Device Name <i class="fas fa-sort sort-icon"></i>
+                                                        </th>
+                                                        <th class="sortable" data-sort="user_email">
+                                                            User Email <i class="fas fa-sort sort-icon"></i>
+                                                        </th>
+                                                        <th class="sortable" data-sort="platform">
+                                                            Platform <i class="fas fa-sort sort-icon"></i>
+                                                        </th>
+                                                        <th class="sortable" data-sort="risk_level">
+                                                            Risk Level <i class="fas fa-sort sort-icon"></i>
+                                                        </th>
+                                                        <th class="sortable" data-sort="active_issues_count">
+                                                            Active Issues <i class="fas fa-sort sort-icon"></i>
+                                                        </th>
+                                                        <th class="sortable" data-sort="last_checkin">
+                                                            Last Check-in <i class="fas fa-sort sort-icon"></i>
+                                                        </th>
+                                                        <th class="sortable" data-sort="days_since_checkin">
+                                                            Days Since <i class="fas fa-sort sort-icon"></i>
+                                                        </th>
+                                                        <th class="sortable" data-sort="os_version">
+                                                            OS Version <i class="fas fa-sort sort-icon"></i>
+                                                        </th>
+                                                        <th class="sortable" data-sort="security_patch_level">
+                                                            Security Patch <i class="fas fa-sort sort-icon"></i>
+                                                        </th>
+                                                        <th class="sortable" data-sort="compliance_status">
+                                                            Connection Status <i class="fas fa-sort sort-icon"></i>
+                                                        </th>
+                                                        <th id="mdmColumnHeader" style="display: none;">
+                                                            Tenant / MDM
+                                                        </th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="devicesTableBody">
+                                                    <tr>
+                                                        <td colspan="11" class="text-center">
+                                                            <div class="spinner-border text-primary" role="status">
+                                                                <span class="visually-hidden">Loading...</span>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div> <!-- End Devices Tab -->
+
+                    <!-- CVE Scanner Tab -->
+                    <div class="tab-pane fade" id="cve-scanner" role="tabpanel">
+                        <div class="row">
+                            <!-- CVE Scanner Controls -->
+                            <div class="col-md-3">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5 class="mb-0">
+                                            <i class="fas fa-sliders-h me-2"></i>Scan Options
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Minimum Severity</label>
+                                            <select class="form-select" id="cveSeverityFilter">
+                                                <option value="0">All Severities (0+)</option>
+                                                <option value="4">Medium+ (4.0+)</option>
+                                                <option value="7" selected>High+ (7.0+)</option>
+                                                <option value="9">Critical (9.0+)</option>
+                                            </select>
+                                            <div class="form-text">Filter CVEs by CVSS severity score</div>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="form-label">Device Activity Filter</label>
+                                            <select class="form-select" id="cveActivityFilter">
+                                                <option value="all">All Devices</option>
+                                                <option value="30" selected>Active (Last 30 days)</option>
+                                                <option value="7">Very Active (Last 7 days)</option>
+                                                <option value="90">Extended (Last 90 days)</option>
+                                            </select>
+                                            <div class="form-text">Exclude stale/disconnected devices</div>
+                                        </div>
+
+                                        <button class="btn btn-primary w-100 mb-2" id="startCveScanBtn">
+                                            <i class="fas fa-search me-1"></i>Start CVE Scan
+                                        </button>
+
+                                        <button class="btn btn-success w-100" id="exportCveReportBtn" disabled>
+                                            <i class="fas fa-file-excel me-1"></i>Export CVE Report
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="card mt-3">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">About CVE Scanner</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="small text-muted">
+                                            The CVE scanner analyzes your fleet for known security vulnerabilities
+                                            based on OS versions and security patch levels.
+                                        </p>
+                                        <p class="small text-muted mb-0">
+                                            <strong>Severity Levels:</strong><br>
+                                            Critical: 9.0-10.0<br>
+                                            High: 7.0-8.9<br>
+                                            Medium: 4.0-6.9<br>
+                                            Low: 0.0-3.9
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- CVE Results -->
+                            <div class="col-md-9">
+                                <!-- Summary Cards -->
+                                <div class="row mb-4" id="cveSummaryCards" style="display: none;">
+                                    <div class="col-md-3">
+                                        <div class="card text-center">
+                                            <div class="card-body">
+                                                <h5 class="card-title" id="cveDevicesScanned">-</h5>
+                                                <p class="card-text text-muted">Devices Scanned</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="card text-center">
+                                            <div class="card-body">
+                                                <h5 class="card-title text-danger" id="cveDevicesAffected">-</h5>
+                                                <p class="card-text text-muted">Devices Affected</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="card text-center">
+                                            <div class="card-body">
+                                                <h5 class="card-title text-warning" id="cveTotalCves">-</h5>
+                                                <p class="card-text text-muted">Unique CVEs</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="card text-center">
+                                            <div class="card-body">
+                                                <h5 class="card-title text-info" id="cveVulnPercentage">-</h5>
+                                                <p class="card-text text-muted">Fleet at Risk</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Severity Breakdown -->
+                                <div class="card mb-3" id="cveSeverityCard" style="display: none;">
+                                    <div class="card-header">
+                                        <h5 class="mb-0">Severity Breakdown</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row text-center">
+                                            <div class="col-3">
+                                                <div class="p-3 bg-danger bg-opacity-10 rounded">
+                                                    <h4 class="text-danger mb-0" id="cveCriticalCount">0</h4>
+                                                    <small class="text-muted">Critical</small>
+                                                </div>
+                                            </div>
+                                            <div class="col-3">
+                                                <div class="p-3 bg-warning bg-opacity-10 rounded">
+                                                    <h4 class="text-warning mb-0" id="cveHighCount">0</h4>
+                                                    <small class="text-muted">High</small>
+                                                </div>
+                                            </div>
+                                            <div class="col-3">
+                                                <div class="p-3 bg-info bg-opacity-10 rounded">
+                                                    <h4 class="text-info mb-0" id="cveMediumCount">0</h4>
+                                                    <small class="text-muted">Medium</small>
+                                                </div>
+                                            </div>
+                                            <div class="col-3">
+                                                <div class="p-3 bg-secondary bg-opacity-10 rounded">
+                                                    <h4 class="text-secondary mb-0" id="cveLowCount">0</h4>
+                                                    <small class="text-muted">Low</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Top CVEs -->
+                                <div class="card mb-3" id="cveTopCvesCard" style="display: none;">
+                                    <div class="card-header">
+                                        <h5 class="mb-0">Top CVEs by Affected Devices</h5>
+                                        <small class="text-muted">Click on a CVE to view details and affected
+                                            devices</small>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Rank</th>
+                                                        <th>CVE ID</th>
+                                                        <th>Affected Devices</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="cveTopCvesBody">
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- CVE Results Placeholder -->
+                                <div class="card" id="cvePlaceholder">
+                                    <div class="card-body text-center py-5">
+                                        <i class="fas fa-bug fa-4x text-muted mb-3"></i>
+                                        <h5 class="text-muted">No CVE Scan Results</h5>
+                                        <p class="text-muted">Click "Start CVE Scan" to analyze your fleet for
+                                            vulnerabilities</p>
+                                    </div>
+                                </div>
+
+                                <!-- CVE Scanning Indicator -->
+                                <div class="card" id="cveScanningIndicator" style="display: none;">
+                                    <div class="card-body text-center py-5">
+                                        <div class="spinner-border text-primary mb-3" role="status">
+                                            <span class="visually-hidden">Scanning...</span>
+                                        </div>
+                                        <h5 class="text-muted">Scanning Fleet for CVE Vulnerabilities...</h5>
+                                        <p class="text-muted">This may take a few moments for large fleets</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div> <!-- End CVE Scanner Tab -->
+                </div> <!-- End tab-content -->
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Error Modal -->
+    <div class="modal fade" id="errorModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Error</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="errorMessage"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CVE Details Modal -->
+    <div class="modal fade" id="cveDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-bug me-2"></i>
+                        <span id="cveDetailsTitle">CVE Details</span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Loading Indicator -->
+                    <div id="cveDetailsLoading" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="text-muted mt-2">Loading CVE details...</p>
+                    </div>
+
+                    <!-- CVE Content -->
+                    <div id="cveDetailsContent" style="display: none;">
+                        <!-- CVE Info -->
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">Vulnerability Information</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <p><strong>CVE ID:</strong> <code id="cveDetailId">-</code></p>
+                                        <p><strong>Severity:</strong> <span id="cveDetailSeverity">-</span></p>
+                                        <p>
+                                            <strong>More Info:</strong><br>
+                                            <a href="#" id="cveNvdLink" target="_blank"
+                                                class="btn btn-sm btn-outline-primary me-2">
+                                                <i class="fas fa-external-link-alt me-1"></i>NVD
+                                            </a>
+                                            <a href="#" id="cveMitreLink" target="_blank"
+                                                class="btn btn-sm btn-outline-secondary">
+                                                <i class="fas fa-external-link-alt me-1"></i>MITRE
+                                            </a>
+                                        </p>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <p><strong>Affected Devices:</strong> <span class="badge bg-danger"
+                                                id="cveDetailDeviceCount">0</span></p>
+                                        <p><strong>Platform:</strong> <span id="cveDetailPlatform">-</span></p>
+                                    </div>
+                                </div>
+                                <div class="mt-2">
+                                    <p><strong>Description:</strong></p>
+                                    <p class="text-muted" id="cveDetailDescription">No description available</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Affected Devices -->
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">Affected Devices</h6>
+                                <button class="btn btn-sm btn-primary" id="exportCveDevicesBtn">
+                                    <i class="fas fa-download me-1"></i>Export Devices
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                    <table class="table table-sm table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Device Name</th>
+                                                <th>User Email</th>
+                                                <th>Model</th>
+                                                <th>Platform</th>
+                                                <th>OS Version</th>
+                                                <th>Security Patch</th>
+                                                <th>Risk</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="cveDevicesTableBody">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Options Modal -->
+    <div class="modal fade" id="exportModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-file-export me-2"></i>
+                        Export Options
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="exportForm">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Export Scope</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="exportScope" id="exportFiltered"
+                                    value="filtered" checked>
+                                <label class="form-check-label" for="exportFiltered">
+                                    Current Filtered Results
+                                    <small class="text-muted d-block">Export only the devices currently shown in the
+                                        table</small>
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="exportScope" id="exportAll"
+                                    value="all">
+                                <label class="form-check-label" for="exportAll">
+                                    All Devices
+                                    <small class="text-muted d-block">Export all devices from the data source (ignoring
+                                        current filters)</small>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Export Format</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="exportFormat" id="formatExcel"
+                                    value="excel" checked>
+                                <label class="form-check-label" for="formatExcel">
+                                    <i class="fas fa-file-excel text-success me-1"></i>
+                                    Excel (.xlsx)
+                                    <small class="text-muted d-block">Full-featured spreadsheet with formatting</small>
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="exportFormat" id="formatCsv"
+                                    value="csv">
+                                <label class="form-check-label" for="formatCsv">
+                                    <i class="fas fa-file-csv text-info me-1"></i>
+                                    CSV (.csv)
+                                    <small class="text-muted d-block">Simple comma-separated values for data
+                                        analysis</small>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Note:</strong> Exports include device details, risk analysis, and compliance
+                            information.
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmExportBtn">
+                        <i class="fas fa-download me-1"></i>
+                        Export Data
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Device Detail Modal -->
+    <div class="modal fade" id="deviceDetailModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-mobile-alt me-2"></i>
+                        Device Details
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="deviceDetailContent">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+
+</html>
