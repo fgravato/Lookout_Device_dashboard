@@ -48,3 +48,4 @@ htmlcov/
 .pytest_cache/
 .claude/
 doc.json
+CLAUDE.md
