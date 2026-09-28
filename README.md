@@ -8,6 +8,7 @@ Flask web application for managing mobile devices via the Lookout Mobile Risk AP
 - **Advanced Filtering** — Filter by platform, risk level, protection status, connection status, days since check-in, and more
 - **Excel Export** — Export filtered device data with summary sheets via openpyxl
 - **CVE Vulnerability Scanning** — Scan device fleet against known CVEs
+- **Issues Tab** — View fleet threats (risk, status, classification, threat type, device owner) via the Lookout Threats API; excludes Phishing and Content Protection (web content) alerts by design
 - **Multi-Tenant Support** — Manage multiple Lookout tenants from a single dashboard
 - **Intelligent Caching** — In-memory + SQLite persistence with background refresh and delta sync
 - **Authentication** — Optional HTTP Basic auth with Werkzeug password hashing
