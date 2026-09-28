@@ -30,6 +30,7 @@ from services.cve_service import CVEService
 from services.tenant_service import TenantService
 from auth import AuthManager
 from routes import health, cache, devices, tenants, export, cve
+from routes import issues as issues_routes
 
 logger = logging.getLogger(__name__)
 
@@ -141,16 +142,18 @@ def create_app(config_name: Optional[str] = None) -> Flask:
         'tenant_service': tenant_service,
         'device_service': device_service,
         'export_service': export_service,
-        'cve_service': None
+        'cve_service': None,
+        'issue_service': None
     }
-    
+
     # Initialize blueprints with auth and limiter
     cache.init_auth(auth_manager, limiter)
     devices.init_auth(auth_manager, limiter)
     tenants.init_auth(auth_manager, limiter)
     export.init_auth(auth_manager, limiter)
     cve.init_auth(auth_manager, limiter)
-    
+    issues_routes.init_auth(auth_manager, limiter)
+
     # Register blueprints
     app.register_blueprint(health.bp)
     app.register_blueprint(cache.bp, url_prefix='/api')
@@ -158,6 +161,7 @@ def create_app(config_name: Optional[str] = None) -> Flask:
     app.register_blueprint(tenants.bp, url_prefix='/api')
     app.register_blueprint(export.bp, url_prefix='/api')
     app.register_blueprint(cve.bp, url_prefix='/api')
+    app.register_blueprint(issues_routes.bp, url_prefix='/api')
     
     register_error_handlers(app)
     

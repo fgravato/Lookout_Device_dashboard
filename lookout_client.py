@@ -249,6 +249,60 @@ class LookoutMRAClient:
             logger.error(f"Unexpected error during CVE device fetch: {e}")
             raise LookoutAPIError(f"CVE device fetch error: {e}")
     
+    def get_threats(self, limit: int = 100, **filters) -> Dict[str, Any]:
+        """
+        Retrieve threats from the Lookout API
+
+        Args:
+            limit: Maximum number of threats to retrieve (max 1000)
+            **filters: Additional filters (classification, risk, status,
+                threat_type, platform, profile_type, timeframe, device_guid,
+                query, oid)
+
+        Returns:
+            Dictionary containing threats and pagination info
+        """
+        self._ensure_authenticated()
+
+        try:
+            url = f"{self.base_url}/mra/api/v2/threats"
+            params = {
+                'limit': min(limit, 1000)
+            }
+            params.update(filters)
+
+            logger.info(f"Fetching threats with params: {params}")
+            response = self.session.get(url, params=params, timeout=30)
+
+            if response.status_code == 200:
+                data = response.json()
+                logger.info(f"Successfully retrieved {len(data.get('threats', []))} threats")
+                return data
+            elif response.status_code == 401:
+                logger.warning("Received 401, re-authenticating and retrying")
+                self.authenticate()
+                response = self.session.get(url, params=params, timeout=30)
+                if response.status_code == 200:
+                    data = response.json()
+                    logger.info(f"Successfully retrieved {len(data.get('threats', []))} threats after re-auth")
+                    return data
+                else:
+                    raise LookoutAPIError(f"API request failed after re-auth: {response.status_code}")
+            elif response.status_code == 429:
+                logger.warning("Rate limited, waiting before retry")
+                time.sleep(5)
+                raise LookoutAPIError("Rate limited - please try again later")
+            else:
+                logger.error(f"API request failed: {response.status_code} - {response.text}")
+                raise LookoutAPIError(f"API request failed: {response.status_code}")
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Network error during threats fetch: {e}")
+            raise LookoutAPIError(f"Network error: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error during threats fetch: {e}")
+            raise LookoutAPIError(f"Threats fetch error: {e}")
+
     def get_fleet_os_versions(self) -> Dict[str, Any]:
         """
         Get all distinct OS versions in the fleet

@@ -41,7 +41,8 @@
                     </a>
                 </li>
                 <li>
-                    <a class="sidebar-link sidebar-grayed" href="#">
+                    <a class="sidebar-link" id="issues-tab" data-bs-toggle="tab" data-bs-target="#issues"
+                        type="button" role="tab">
                         <i class="fas fa-chart-pie"></i>
                         <span>Issues</span>
                     </a>
@@ -514,6 +515,112 @@
                             </div>
                         </div>
                     </div> <!-- End CVE Scanner Tab -->
+
+                    <div class="tab-pane fade" id="issues" role="tabpanel">
+                        <div class="row">
+                            <!-- Issue Filters -->
+                            <div class="col-md-3">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5 class="mb-0">
+                                            <i class="fas fa-sliders-h me-2"></i>Filters
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Risk</label>
+                                            <select class="form-select" id="issueRiskFilter">
+                                                <option value="">All Risk Levels</option>
+                                                <option value="HIGH">High</option>
+                                                <option value="MEDIUM">Medium</option>
+                                                <option value="LOW">Low</option>
+                                                <option value="ADVISORY">Advisory</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="form-label">Status</label>
+                                            <select class="form-select" id="issueStatusFilter">
+                                                <option value="">All Statuses</option>
+                                                <option value="OPEN" selected>Open</option>
+                                                <option value="RESOLVED">Resolved</option>
+                                                <option value="IGNORED">Ignored</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="form-label">Threat Type</label>
+                                            <select class="form-select" id="issueThreatTypeFilter">
+                                                <option value="">All Types</option>
+                                                <option value="APPLICATION">Application</option>
+                                                <option value="CONFIGURATION">Configuration</option>
+                                                <option value="FILE">File</option>
+                                                <option value="NETWORK">Network</option>
+                                                <option value="OS">OS</option>
+                                            </select>
+                                        </div>
+
+                                        <button class="btn btn-primary w-100" id="refreshIssuesBtn">
+                                            <i class="fas fa-sync me-1"></i>Refresh Issues
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="card mt-3">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">About Issues</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="small text-muted mb-0">
+                                            Shows device threats from Lookout. Phishing and Content
+                                            Protection (web content) alerts are not included in this view.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Issue Results -->
+                            <div class="col-md-9">
+                                <div class="card" id="issuesTableCard" style="display: none;">
+                                    <div class="card-body">
+                                        <div class="table-responsive">
+                                            <table class="table table-hover" id="issuesTable">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Device</th>
+                                                        <th>Owner</th>
+                                                        <th>Classification</th>
+                                                        <th>Threat Type</th>
+                                                        <th>Risk</th>
+                                                        <th>Status</th>
+                                                        <th>Detected</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="issuesTableBody"></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="card" id="issuesPlaceholder">
+                                    <div class="card-body text-center py-5">
+                                        <i class="fas fa-chart-pie fa-4x text-muted mb-3"></i>
+                                        <h5 class="text-muted">No Issues Loaded</h5>
+                                        <p class="text-muted">Click "Refresh Issues" to load fleet threats</p>
+                                    </div>
+                                </div>
+
+                                <div class="card" id="issuesLoadingIndicator" style="display: none;">
+                                    <div class="card-body text-center py-5">
+                                        <div class="spinner-border text-primary mb-3" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <h5 class="text-muted">Loading Issues...</h5>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div> <!-- End Issues Tab -->
                 </div> <!-- End tab-content -->
             </div>
 
