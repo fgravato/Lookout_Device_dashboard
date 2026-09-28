@@ -2073,13 +2073,100 @@ class CVEScanner {
     }
 }
 
+// Issues (Threats) functionality
+class IssuesManager {
+    constructor() {
+        this.initEventListeners();
+    }
+
+    initEventListeners() {
+        const refreshBtn = document.getElementById('refreshIssuesBtn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => this.loadIssues());
+        }
+    }
+
+    async loadIssues() {
+        const risk = document.getElementById('issueRiskFilter').value;
+        const status = document.getElementById('issueStatusFilter').value;
+        const threatType = document.getElementById('issueThreatTypeFilter').value;
+
+        document.getElementById('issuesPlaceholder').style.display = 'none';
+        document.getElementById('issuesTableCard').style.display = 'none';
+        document.getElementById('issuesLoadingIndicator').style.display = 'block';
+        document.getElementById('refreshIssuesBtn').disabled = true;
+
+        try {
+            const params = new URLSearchParams();
+            if (risk) params.set('risk', risk);
+            if (status) params.set('status', status);
+            if (threatType) params.set('threat_type', threatType);
+
+            const response = await fetch(`/api/issues?${params.toString()}`);
+            if (!response.ok) {
+                throw new Error(`Failed to load issues: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            this.displayResults(data.issues || []);
+
+        } catch (error) {
+            console.error('Issues load error:', error);
+            document.getElementById('issuesLoadingIndicator').style.display = 'none';
+            document.getElementById('issuesPlaceholder').style.display = 'block';
+        } finally {
+            document.getElementById('refreshIssuesBtn').disabled = false;
+        }
+    }
+
+    displayResults(issues) {
+        document.getElementById('issuesLoadingIndicator').style.display = 'none';
+
+        if (issues.length === 0) {
+            document.getElementById('issuesPlaceholder').style.display = 'block';
+            document.getElementById('issuesTableCard').style.display = 'none';
+            return;
+        }
+
+        const tbody = document.getElementById('issuesTableBody');
+        tbody.replaceChildren();
+
+        issues.forEach(issue => {
+            const row = document.createElement('tr');
+            const deviceId = issue.device_guid || (issue.device && issue.device.guid) || 'N/A';
+            const info = issue.device_info || {};
+            const deviceLabel = info.device_name || (deviceId !== 'N/A' ? `Device-${deviceId.slice(0, 8)}` : 'N/A');
+            const deviceDetail = [info.platform, info.model].filter(Boolean).join(' ');
+            const values = [
+                deviceDetail ? `${deviceLabel} (${deviceDetail})` : deviceLabel,
+                info.owner_email || 'N/A',
+                issue.classification || 'N/A',
+                issue.type || 'N/A',
+                issue.risk || 'N/A',
+                issue.status || 'N/A',
+                issue.detected_at || issue.created_time || 'N/A'
+            ];
+            values.forEach(value => {
+                const cell = document.createElement('td');
+                cell.textContent = value;
+                row.appendChild(cell);
+            });
+            tbody.appendChild(row);
+        });
+
+        document.getElementById('issuesTableCard').style.display = 'block';
+    }
+}
+
 // Initialize CVE Scanner
 let cveScanner;
+let issuesManager;
 
 // Initialize dashboard when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.dashboard = new Dashboard();
     cveScanner = new CVEScanner();
+    issuesManager = new IssuesManager();
 });
 
 // Handle page visibility change for auto-refresh
