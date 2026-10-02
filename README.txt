@@ -47,11 +47,11 @@ Step 1: Verify Python is installed
 
 Step 2: Extract the package
 ------------------------------------
-  Double-click the ZIP file to extract it, or in Terminal run:
+  In Terminal, run:
 
       cd ~/Downloads
-      unzip lookout-mra-dashboard.zip
-      cd lookout-mra-dashboard
+      tar -xzf lookout-mra-dashboard-v1.0.0.tar.gz
+      cd lookout-mra-dashboard-v1.0.0
 
 Step 3: Create a virtual environment (recommended)
 ------------------------------------
@@ -99,7 +99,7 @@ Step 7: Subsequent launches
   Each time you open a new Terminal session, re-activate the virtual
   environment before starting:
 
-      cd ~/Downloads/lookout-mra-dashboard
+      cd ~/Downloads/lookout-mra-dashboard-v1.0.0
       source venv/bin/activate
       python3 run_dashboard.py
 
@@ -125,11 +125,13 @@ Step 1: Verify Python is installed
 
 Step 2: Extract the package
 ------------------------------------
-  Right-click the ZIP file and select "Extract All...".
-  Choose a destination (e.g. your Desktop or Documents folder).
-  Open Command Prompt and navigate to the extracted folder:
+  Open Command Prompt, navigate to the folder containing the archive, and run:
 
-      cd "%USERPROFILE%\Desktop\lookout-mra-dashboard"
+      tar -xzf lookout-mra-dashboard-v1.0.0.tar.gz
+
+  Then navigate to the extracted folder:
+
+      cd "%USERPROFILE%\Desktop\lookout-mra-dashboard-v1.0.0"
 
   (Adjust the path to wherever you extracted it.)
 
@@ -188,7 +190,7 @@ Step 7: Subsequent launches
   Each time you open a new Command Prompt session, re-activate the
   virtual environment before starting:
 
-      cd "%USERPROFILE%\Desktop\lookout-mra-dashboard"
+      cd "%USERPROFILE%\Desktop\lookout-mra-dashboard-v1.0.0"
       venv\Scripts\activate
       python run_dashboard.py
 
@@ -322,7 +324,7 @@ Solution: Run PowerShell as Administrator and execute:
 
 macOS:
   Simply delete the extracted folder and its contents:
-      rm -rf ~/Downloads/lookout-mra-dashboard
+      rm -rf ~/Downloads/lookout-mra-dashboard-v1.0.0
 
 Windows:
   Delete the extracted folder from wherever you placed it (Desktop,

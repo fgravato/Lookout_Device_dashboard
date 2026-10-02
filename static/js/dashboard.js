@@ -117,6 +117,32 @@ class Dashboard {
             this.performExport();
         });
 
+        // Manage tenants button
+        document.getElementById('manageTenantsBtn').addEventListener('click', () => {
+            this.openTenantManagerModal();
+        });
+
+        // Add tenant form
+        document.getElementById('showAddTenantFormBtn').addEventListener('click', () => {
+            document.getElementById('editTenantForm').style.display = 'none';
+            document.getElementById('addTenantForm').style.display = 'block';
+        });
+        document.getElementById('cancelAddTenantBtn').addEventListener('click', () => {
+            this.clearAddTenantForm();
+            document.getElementById('addTenantForm').style.display = 'none';
+        });
+        document.getElementById('submitAddTenantBtn').addEventListener('click', () => {
+            this.submitAddTenant();
+        });
+
+        // Edit tenant form
+        document.getElementById('cancelEditTenantBtn').addEventListener('click', () => {
+            document.getElementById('editTenantForm').style.display = 'none';
+        });
+        document.getElementById('submitEditTenantBtn').addEventListener('click', () => {
+            this.submitEditTenant();
+        });
+
         // Sortable column headers
         document.querySelectorAll('.sortable').forEach(header => {
             header.addEventListener('click', () => {
@@ -291,6 +317,7 @@ class Dashboard {
 
             // Reload devices after refresh
             await this.loadDevices();
+            await this.loadTenants();
 
             // Clear vulnerability filter after refresh
             document.getElementById('vulnerabilityInput').value = '';
@@ -309,7 +336,7 @@ class Dashboard {
 
     async clearCache() {
         try {
-            const response = await fetch('/api/cache/clear');
+            const response = await fetch('/api/cache/clear', { method: 'POST' });
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -1584,10 +1611,74 @@ class Dashboard {
                 }
             }
 
+            this.renderTenantSyncStatus(data);
+
         } catch (error) {
             console.log('Multi-tenant mode not enabled or error loading tenants:', error);
             this.multiTenantEnabled = false;
         }
+    }
+
+    renderTenantSyncStatus(tenantsData) {
+        const card = document.getElementById('tenantSyncStatusCard');
+        const container = document.getElementById('tenantSyncStatus');
+        if (!card || !container) return;
+
+        const tenants = (tenantsData && tenantsData.tenants) || [];
+
+        if (!this.multiTenantEnabled || tenants.length === 0) {
+            card.style.display = 'none';
+            return;
+        }
+
+        card.style.display = 'block';
+
+        const statusMeta = {
+            ok: { color: '#28a745', label: 'OK' },
+            error: { color: '#dc3545', label: 'Error' },
+            unknown: { color: '#6c757d', label: 'Unknown' },
+            disabled: { color: '#6c757d', label: 'Disabled' }
+        };
+
+        container.innerHTML = tenants.map(tenant => {
+            const status = tenant.status || 'unknown';
+            const meta = statusMeta[status] || statusMeta.unknown;
+
+            let detail;
+            if (status === 'ok') {
+                detail = `<small class="text-muted">Last synced: ${this.formatRelativeTime(tenant.last_success)}</small>`;
+            } else if (status === 'error') {
+                detail = `<small class="text-danger">${this.escapeHtml(tenant.error_message || 'Sync failed')}</small>`;
+            } else if (status === 'disabled') {
+                detail = `<small class="text-muted">Tenant disabled</small>`;
+            } else {
+                detail = `<small class="text-muted">Never synced</small>`;
+            }
+
+            return `
+                <div class="mb-2">
+                    <span class="d-inline-block rounded-circle me-1" style="width: 8px; height: 8px; background-color: ${meta.color};"></span>
+                    <strong>${this.escapeHtml(tenant.tenant_name)}</strong>
+                    <div>${detail}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    formatRelativeTime(isoString) {
+        if (!isoString) return 'Unknown';
+        const then = new Date(isoString);
+        if (isNaN(then.getTime())) return 'Unknown';
+
+        const minutes = Math.round((Date.now() - then.getTime()) / 60000);
+        if (minutes < 1) return 'just now';
+        if (minutes < 60) return `${minutes} minutes ago`;
+
+        const hours = Math.round(minutes / 60);
+        if (hours < 24) return `${hours} hours ago`;
+
+        const days = Math.round(hours / 24);
+        return `${days} days ago`;
     }
 
     populateTenantFilters(tenantsData) {
@@ -1622,6 +1713,247 @@ class Dashboard {
         const hintElement = document.getElementById('tenantFilterHint');
         if (hintElement && tenantsData.enabled_tenants) {
             hintElement.textContent = `Filter devices by tenant or MDM (${tenantsData.enabled_tenants} tenants configured)`;
+        }
+    }
+
+    openTenantManagerModal() {
+        document.getElementById('addTenantForm').style.display = 'none';
+        document.getElementById('editTenantForm').style.display = 'none';
+        this.clearAddTenantForm();
+        this.loadTenantManagerTable();
+
+        const modal = new bootstrap.Modal(document.getElementById('tenantManagerModal'));
+        modal.show();
+    }
+
+    async loadTenantManagerTable() {
+        try {
+            const response = await fetch('/api/tenants');
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            this.renderTenantManagerTable(data.tenants || []);
+        } catch (error) {
+            this.showError(`Failed to load tenants: ${error.message}`);
+        }
+    }
+
+    renderTenantManagerTable(tenants) {
+        const tbody = document.getElementById('tenantManagerTableBody');
+        if (!tbody) return;
+
+        this.tenantManagerTenants = tenants;
+
+        tbody.innerHTML = tenants.map(tenant => {
+            const statusBadge = tenant.enabled
+                ? '<span class="badge bg-success">Enabled</span>'
+                : '<span class="badge bg-secondary">Disabled</span>';
+            const toggleAction = tenant.enabled ? 'suspend' : 'activate';
+            const toggleLabel = tenant.enabled ? 'Suspend' : 'Activate';
+            const tenantId = this.escapeHtml(tenant.tenant_id);
+
+            return `
+                <tr>
+                    <td>${this.escapeHtml(tenant.tenant_name)}</td>
+                    <td>${this.escapeHtml(tenant.mdm_provider)}</td>
+                    <td>${this.escapeHtml(tenant.mdm_identifier)}</td>
+                    <td>${statusBadge}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary tenant-edit-btn" data-tenant-id="${tenantId}">Edit</button>
+                        <button class="btn btn-sm btn-outline-warning tenant-toggle-btn" data-tenant-id="${tenantId}" data-toggle-action="${toggleAction}">${toggleLabel}</button>
+                        <button class="btn btn-sm btn-outline-secondary tenant-purge-btn" data-tenant-id="${tenantId}">Purge Data</button>
+                        <button class="btn btn-sm btn-outline-danger tenant-delete-btn" data-tenant-id="${tenantId}">Delete</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        this.addTenantManagerRowHandlers();
+    }
+
+    addTenantManagerRowHandlers() {
+        document.querySelectorAll('.tenant-edit-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.showEditTenantForm(btn.getAttribute('data-tenant-id'));
+            });
+        });
+
+        document.querySelectorAll('.tenant-toggle-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.toggleTenantEnabled(btn.getAttribute('data-tenant-id'), btn.getAttribute('data-toggle-action'));
+            });
+        });
+
+        document.querySelectorAll('.tenant-purge-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.purgeTenantData(btn.getAttribute('data-tenant-id'));
+            });
+        });
+
+        document.querySelectorAll('.tenant-delete-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.deleteTenantConfirm(btn.getAttribute('data-tenant-id'));
+            });
+        });
+    }
+
+    clearAddTenantForm() {
+        document.getElementById('addTenantId').value = '';
+        document.getElementById('addTenantName').value = '';
+        document.getElementById('addTenantMdmProvider').value = '';
+        document.getElementById('addTenantMdmIdentifier').value = '';
+        document.getElementById('addTenantAppKey').value = '';
+        document.getElementById('addTenantDescription').value = '';
+    }
+
+    async submitAddTenant() {
+        const body = {
+            tenant_id: document.getElementById('addTenantId').value.trim(),
+            tenant_name: document.getElementById('addTenantName').value.trim(),
+            mdm_provider: document.getElementById('addTenantMdmProvider').value.trim(),
+            mdm_identifier: document.getElementById('addTenantMdmIdentifier').value.trim(),
+            lookout_application_key: document.getElementById('addTenantAppKey').value,
+            description: document.getElementById('addTenantDescription').value.trim()
+        };
+
+        try {
+            const response = await fetch('/api/tenants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error((errorData.error && errorData.error.message) || `HTTP error! status: ${response.status}`);
+            }
+
+            this.clearAddTenantForm();
+            document.getElementById('addTenantForm').style.display = 'none';
+
+            await this.loadTenantManagerTable();
+            await this.loadTenants();
+        } catch (error) {
+            this.showError(`Failed to add tenant: ${error.message}`);
+        }
+    }
+
+    showEditTenantForm(tenantId) {
+        const tenant = (this.tenantManagerTenants || []).find(t => t.tenant_id === tenantId);
+        if (!tenant) return;
+
+        document.getElementById('addTenantForm').style.display = 'none';
+
+        document.getElementById('editTenantId').value = tenant.tenant_id;
+        document.getElementById('editTenantName').value = tenant.tenant_name;
+        document.getElementById('editTenantMdmProvider').value = tenant.mdm_provider;
+        document.getElementById('editTenantMdmIdentifier').value = tenant.mdm_identifier;
+        document.getElementById('editTenantAppKey').value = '';
+        document.getElementById('editTenantDescription').value = tenant.description || '';
+
+        document.getElementById('editTenantForm').style.display = 'block';
+    }
+
+    async submitEditTenant() {
+        const tenantId = document.getElementById('editTenantId').value;
+        const body = {};
+
+        const tenantName = document.getElementById('editTenantName').value.trim();
+        if (tenantName) body.tenant_name = tenantName;
+
+        const mdmProvider = document.getElementById('editTenantMdmProvider').value.trim();
+        if (mdmProvider) body.mdm_provider = mdmProvider;
+
+        const mdmIdentifier = document.getElementById('editTenantMdmIdentifier').value.trim();
+        if (mdmIdentifier) body.mdm_identifier = mdmIdentifier;
+
+        const description = document.getElementById('editTenantDescription').value;
+        if (description) body.description = description;
+
+        // Only send the application key if the field was actually filled in -
+        // the API never returns the key, so a blank field always means "no change"
+        const appKey = document.getElementById('editTenantAppKey').value;
+        if (appKey) body.lookout_application_key = appKey;
+
+        try {
+            const response = await fetch(`/api/tenants/${encodeURIComponent(tenantId)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error((errorData.error && errorData.error.message) || `HTTP error! status: ${response.status}`);
+            }
+
+            document.getElementById('editTenantForm').style.display = 'none';
+
+            await this.loadTenantManagerTable();
+            await this.loadTenants();
+        } catch (error) {
+            this.showError(`Failed to update tenant: ${error.message}`);
+        }
+    }
+
+    async toggleTenantEnabled(tenantId, action) {
+        try {
+            const response = await fetch(`/api/tenants/${encodeURIComponent(tenantId)}/${action}`, { method: 'POST' });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error((errorData.error && errorData.error.message) || `HTTP error! status: ${response.status}`);
+            }
+
+            await this.loadTenantManagerTable();
+            await this.loadTenants();
+        } catch (error) {
+            this.showError(`Failed to ${action} tenant: ${error.message}`);
+        }
+    }
+
+    async purgeTenantData(tenantId) {
+        const tenant = (this.tenantManagerTenants || []).find(t => t.tenant_id === tenantId);
+        const tenantName = tenant ? tenant.tenant_name : tenantId;
+
+        if (!confirm(`Purge cached device data for "${tenantName}"? Devices will be re-fetched on next sync.`)) return;
+
+        try {
+            const response = await fetch(`/api/tenants/${encodeURIComponent(tenantId)}/purge`, { method: 'POST' });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error((errorData.error && errorData.error.message) || `HTTP error! status: ${response.status}`);
+            }
+
+            await this.loadTenantManagerTable();
+            await this.loadTenants();
+        } catch (error) {
+            this.showError(`Failed to purge tenant data: ${error.message}`);
+        }
+    }
+
+    async deleteTenantConfirm(tenantId) {
+        const tenant = (this.tenantManagerTenants || []).find(t => t.tenant_id === tenantId);
+        const tenantName = tenant ? tenant.tenant_name : tenantId;
+
+        if (!confirm(`Delete tenant "${tenantName}" and purge all its cached device data? This cannot be undone.`)) return;
+
+        try {
+            const response = await fetch(`/api/tenants/${encodeURIComponent(tenantId)}`, { method: 'DELETE' });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error((errorData.error && errorData.error.message) || `HTTP error! status: ${response.status}`);
+            }
+
+            await this.loadTenantManagerTable();
+            await this.loadTenants();
+        } catch (error) {
+            this.showError(`Failed to delete tenant: ${error.message}`);
         }
     }
 
@@ -1735,6 +2067,16 @@ class CVEScanner {
         if (exportCveDevicesBtn) {
             exportCveDevicesBtn.addEventListener('click', () => this.exportCveDevices());
         }
+
+        // Other-CVEs popover content lives outside cveDevicesTableBody (Bootstrap
+        // appends it to <body>), so its links are handled via delegation here.
+        document.addEventListener('click', (e) => {
+            const link = e.target.closest('.cve-other-link');
+            if (link) {
+                e.preventDefault();
+                this.showCveDetails(link.getAttribute('data-cve'));
+            }
+        });
     }
 
     async startScan() {
@@ -1922,8 +2264,17 @@ class CVEScanner {
         const uniqueDevices = this.deduplicateDevices(devices);
 
         const tbody = document.getElementById('cveDevicesTableBody');
+
+        // Dispose popovers tied to rows we're about to replace, so they don't
+        // leak orphaned .popover elements onto <body> across CVE switches.
+        tbody.querySelectorAll('.other-cves-toggle').forEach(btn => {
+            bootstrap.Popover.getInstance(btn)?.dispose();
+        });
+
         if (uniqueDevices.length > 0) {
-            tbody.innerHTML = uniqueDevices.map(device => {
+            const otherCvesByRow = [];
+
+            tbody.innerHTML = uniqueDevices.map((device, idx) => {
                 const riskLevel = (device.risk_level || '').toLowerCase();
                 let riskClass = 'secondary';
                 if (riskLevel === 'critical') riskClass = 'danger';
@@ -1933,6 +2284,15 @@ class CVEScanner {
 
                 const platformClass = (device.platform || '').toLowerCase() === 'ios' ? 'primary' : 'success';
 
+                const otherCves = this.getOtherCvesForDevice(device, cveName)
+                    .sort((a, b) => (b.severity || 0) - (a.severity || 0));
+                otherCvesByRow[idx] = otherCves;
+                const otherCvesCell = otherCves.length > 0
+                    ? `<button type="button" class="btn btn-sm btn-outline-danger other-cves-toggle" data-idx="${idx}">
+                        ${otherCves.length} CVE${otherCves.length !== 1 ? 's' : ''}
+                       </button>`
+                    : '<span class="text-muted">&mdash;</span>';
+
                 return `<tr>
                     <td><strong>${device.device_name || device.guid || 'Unknown'}</strong></td>
                     <td>${device.email || 'N/A'}</td>
@@ -1941,10 +2301,24 @@ class CVEScanner {
                     <td>${device.os_version || 'Unknown'}</td>
                     <td>${device.security_patch_level || 'N/A'}</td>
                     <td>${device.risk_level ? `<span class="badge bg-${riskClass}">${device.risk_level}</span>` : ''}</td>
+                    <td>${otherCvesCell}</td>
                 </tr>`;
             }).join('');
+
+            tbody.querySelectorAll('.other-cves-toggle').forEach(btn => {
+                const idx = parseInt(btn.getAttribute('data-idx'), 10);
+                const cves = otherCvesByRow[idx];
+                new bootstrap.Popover(btn, {
+                    trigger: 'focus',
+                    html: true,
+                    placement: 'left',
+                    container: 'body',
+                    title: 'Other CVEs on this device',
+                    content: () => this.buildOtherCvesPopoverHtml(cves)
+                });
+            });
         } else {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No devices found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No devices found</td></tr>';
         }
 
         // Store current CVE data for export
@@ -1952,6 +2326,50 @@ class CVEScanner {
             cve: cveName,
             devices: uniqueDevices
         };
+    }
+
+    buildOtherCvesPopoverHtml(cves) {
+        const items = cves.map(v => {
+            const sev = (v.severity_label || '').toLowerCase();
+            let cls = 'secondary';
+            if (sev === 'critical') cls = 'danger';
+            else if (sev === 'high') cls = 'warning';
+            else if (sev === 'medium') cls = 'info';
+            return `<a href="#" class="cve-other-link d-block mb-1" data-cve="${v.cve}">
+                <span class="badge bg-${cls} me-1">${v.severity_label || '?'}</span>${v.cve}
+            </a>`;
+        }).join('');
+        return `<div class="other-cves-popover-list">${items}</div>`;
+    }
+
+    getOtherCvesForDevice(device, currentCve) {
+        // Cross-references the last fleet scan's results (same severity filter
+        // that scan used) - not a live per-device lookup.
+        if (!this.allVulnerabilities || this.allVulnerabilities.length === 0) return [];
+
+        const platform = (device.platform || '').toLowerCase();
+        const seen = new Set([currentCve]);
+        const matches = [];
+
+        for (const vuln of this.allVulnerabilities) {
+            if (seen.has(vuln.cve)) continue;
+            const vPlatform = (vuln.platform || '').toLowerCase();
+            if (vPlatform !== platform) continue;
+
+            const sameAndroidPatch = platform === 'android' &&
+                vuln.patch_level && device.security_patch_level &&
+                vuln.patch_level === device.security_patch_level;
+            const sameIosVersion = platform === 'ios' &&
+                vuln.os_version && device.os_version &&
+                vuln.os_version === device.os_version;
+
+            if (sameAndroidPatch || sameIosVersion) {
+                seen.add(vuln.cve);
+                matches.push(vuln);
+            }
+        }
+
+        return matches;
     }
 
     deduplicateDevices(devices) {

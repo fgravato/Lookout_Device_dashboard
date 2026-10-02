@@ -10,14 +10,15 @@ Handles all device-related business logic including:
 
 import json
 import logging
+import threading
 import time
 from datetime import datetime
 from typing import List, Dict, Optional, Any
 
 from lookout_client import LookoutMRAClient, LookoutAPIError
-from device_cache import DeviceCache, enhanced_device_mapping
+from device_cache import DeviceCache
 from services.tenant_service import TenantService, Tenant
-from utils.time_utils import days_since_checkin_from_device, get_connection_status
+from utils.time_utils import days_since_checkin, days_since_checkin_from_device, get_connection_status
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,10 @@ class DeviceService:
         self.lookout_client = None
         self.tenant_service = tenant_service
         self.tenant_clients: Dict[str, LookoutMRAClient] = {}
+        self._fetch_condition = threading.Condition()
+        self._fetch_in_progress = False
+        self._last_fetch_result: List[Dict] = []
+        self._last_fetch_error: Optional[Exception] = None
     
     def get_lookout_client(self) -> Optional[LookoutMRAClient]:
         """Get or create Lookout API client"""
@@ -51,36 +56,83 @@ class DeviceService:
                 self.lookout_client = None
         return self.lookout_client
     
+    def get_cve_client(self) -> Optional[LookoutMRAClient]:
+        """
+        Get an authenticated Lookout API client for CVE/vulnerability queries.
+
+        CVE data is fleet-wide rather than tenant-scoped, so in multi-tenant
+        mode this uses the first enabled tenant's client rather than the
+        (unset) global client.
+        """
+        if self.config.ENABLE_MULTI_TENANT and self.tenant_service:
+            tenants = self.tenant_service.get_all_tenants(enabled_only=True)
+            if not tenants:
+                logger.error("No enabled tenants available for CVE client")
+                return None
+            try:
+                return self._get_tenant_client(tenants[0])
+            except LookoutAPIError as e:
+                logger.error(f"Failed to create CVE client for tenant {tenants[0].tenant_id}: {e}")
+                return None
+        return self.get_lookout_client()
+
     def fetch_and_cache_devices(self) -> List[Dict]:
         """
         Fetch devices from API and update cache
         Supports both single-tenant and multi-tenant modes
-        
+
+        A fetch already in progress on another thread is not duplicated -
+        callers that arrive while one is running wait for it and reuse its
+        result. Without this, e.g. clicking Full Refresh and then immediately
+        starting a CVE scan can fire two concurrent fetches against the same
+        tenant credentials and trip the Lookout API's rate limit.
+
         Returns:
             List of device dictionaries
-            
+
         Raises:
             Exception: If unable to fetch devices from any source
         """
-        start_time = datetime.now()
-        
-        # Check if we should use sample data (development mode)
-        use_sample_data = self.config.USE_SAMPLE_DATA
-        
-        if use_sample_data:
-            devices = self._load_sample_data()
-        elif self.config.ENABLE_MULTI_TENANT and self.tenant_service:
-            devices = self._fetch_from_all_tenants()
-        else:
-            devices = self._fetch_from_api()
-        
-        # Calculate API response time
-        api_response_time = (datetime.now() - start_time).total_seconds()
-        
-        # Update cache
-        self.device_cache.update_devices(devices, api_response_time)
-        
-        return devices
+        with self._fetch_condition:
+            if self._fetch_in_progress:
+                self._fetch_condition.wait()
+                if self._last_fetch_error is not None:
+                    raise self._last_fetch_error
+                return self._last_fetch_result
+            self._fetch_in_progress = True
+
+        devices = None
+        error = None
+        try:
+            start_time = datetime.now()
+
+            # Check if we should use sample data (development mode)
+            use_sample_data = self.config.USE_SAMPLE_DATA
+
+            if use_sample_data:
+                devices = self._load_sample_data()
+            elif self.config.ENABLE_MULTI_TENANT and self.tenant_service:
+                devices = self._fetch_from_all_tenants()
+            else:
+                devices = self._fetch_from_api()
+
+            # Calculate API response time
+            api_response_time = (datetime.now() - start_time).total_seconds()
+
+            # Update cache
+            self.device_cache.update_devices(devices, api_response_time)
+
+            return devices
+        except Exception as e:
+            error = e
+            raise
+        finally:
+            with self._fetch_condition:
+                self._last_fetch_error = error
+                if devices is not None:
+                    self._last_fetch_result = devices
+                self._fetch_in_progress = False
+                self._fetch_condition.notify_all()
     
     def _load_sample_data(self) -> List[Dict]:
         """Load sample data from file"""
@@ -133,9 +185,11 @@ class DeviceService:
                 
                 all_devices.extend(tenant_devices)
                 logger.info(f"Retrieved {len(tenant_devices)} devices from {tenant.tenant_name}")
-                
+                self.device_cache.record_tenant_sync_success(tenant.tenant_id, tenant.tenant_name, len(tenant_devices))
+
             except Exception as e:
                 logger.error(f"Failed to fetch devices from tenant {tenant.tenant_name}: {e}")
+                self.device_cache.record_tenant_sync_failure(tenant.tenant_id, tenant.tenant_name, str(e))
                 # Continue with other tenants even if one fails
                 continue
         
@@ -170,6 +224,17 @@ class DeviceService:
         
         return client
     
+    def drop_tenant_client(self, tenant_id: str) -> None:
+        """
+        Remove a cached API client for a tenant, e.g. after the tenant is
+        deleted or purged, so a stale client isn't reused if the tenant_id
+        is ever re-added later.
+
+        Args:
+            tenant_id: The tenant identifier
+        """
+        self.tenant_clients.pop(tenant_id, None)
+
     def _fetch_from_api(self) -> List[Dict]:
         """Fetch devices from production API (single tenant mode)"""
         devices = []
@@ -311,10 +376,10 @@ class DeviceService:
     def get_cached_devices(self, max_age_minutes: int = 60) -> Optional[List[Dict]]:
         """
         Get devices from cache if valid
-        
+
         Args:
             max_age_minutes: Maximum cache age in minutes
-            
+
         Returns:
             List of cached devices or None if cache invalid
         """
@@ -322,7 +387,24 @@ class DeviceService:
             logger.info("Serving devices from cache")
             return self.device_cache.get_all_devices()
         return None
-    
+
+    def get_or_refresh_devices(self, max_age_minutes: int = 60, force_refresh: bool = False) -> List[Dict]:
+        """
+        Get devices from cache if valid, otherwise fetch and cache fresh devices
+
+        Args:
+            max_age_minutes: Maximum cache age in minutes
+            force_refresh: If True, bypass the cache and fetch fresh devices
+
+        Returns:
+            List of device dictionaries
+        """
+        if not force_refresh:
+            devices = self.get_cached_devices(max_age_minutes)
+            if devices is not None:
+                return devices
+        return self.fetch_and_cache_devices()
+
     def get_device_by_id(self, device_id: str) -> Optional[Dict]:
         """
         Get a specific device by ID
@@ -461,3 +543,197 @@ class DeviceService:
         except Exception as e:
             logger.error(f"Unexpected error fetching devices for CVE {cve_name}: {e}")
             return []
+
+
+def enhanced_device_mapping(device: Dict, precompute_analysis: bool = True) -> Dict:
+    """
+    Enhanced device mapping to extract all available API fields properly.
+
+    Pre-computes days_since_checkin and connection_status_info for performance.
+    Risk analysis is computed once and cached in the device dict.
+
+    Args:
+        device: Raw device data from API
+        precompute_analysis: If True, pre-compute risk analysis (default True)
+
+    Returns:
+        Mapped device dict with pre-computed fields
+    """
+    try:
+        # Helper functions for status mapping
+        def map_security_status(status):
+            mapping = {
+                'SECURE': 'Secure',
+                'THREATS_LOW': 'Low',
+                'THREATS_MEDIUM': 'Medium',
+                'THREATS_HIGH': 'High',
+                'CRITICAL': 'Critical'
+            }
+            return mapping.get(status, 'Unknown')
+
+        def map_protection_status(status, days_since, activation_status, risk_level):
+            """Enhanced compliance determination based on multiple factors"""
+            if not status:
+                return 'Unknown'
+
+            # Primary factor: Protection status from Lookout API
+            protection_mapping = {
+                'PROTECTED': 'Connected',
+                'DISCONNECTED': 'Disconnected',
+                'UNPROTECTED': 'Pending'
+            }
+
+            base_compliance = protection_mapping.get(status, 'Unknown')
+
+            # Enhanced compliance logic based on multiple factors
+            if status == 'PROTECTED':
+                # Fully compliant if low risk, recently active, and properly activated
+                if (risk_level in ['low', 'secure'] and
+                    days_since <= 7 and
+                    activation_status == 'activated'):
+                    return 'Fully Compliant'
+                elif days_since <= 30:
+                    return 'Connected'
+                elif risk_level in ['medium', 'high', 'critical']:
+                    return 'At-Risk'
+                else:
+                    return 'Connected'
+
+            elif status == 'DISCONNECTED':
+                if days_since > 30:
+                    return 'Non-Compliant'
+                else:
+                    return 'Disconnected'
+
+            elif status == 'UNPROTECTED':
+                if activation_status != 'activated':
+                    return 'Pending Activation'
+                else:
+                    return 'Pending'
+
+            return base_compliance
+
+        # Extract nested objects safely
+        software = device.get('software', {}) or {}
+        hardware = device.get('hardware', {}) or {}
+        client = device.get('client', {}) or {}
+        details = device.get('details', {}) or {}
+
+        # Pre-compute days since checkin and connection status
+        checkin_time = device.get('checkin_time')
+        computed_days_since = days_since_checkin(checkin_time)
+        computed_connection_status = get_connection_status(computed_days_since)
+
+        # Get values needed for compliance calculation
+        risk_level_raw = map_security_status(device.get('security_status')).lower()
+        activation_status = device.get('activation_status', 'Unknown').lower()
+
+        mapped_device = {
+            # Basic device information
+            'device_name': (
+                device.get('customer_device_id') or
+                f"Device-{device.get('guid', 'Unknown')[:8]}"
+            ),
+            'device_id': device.get('guid'),
+            'user_email': device.get('email', 'N/A'),
+            'platform': device.get('platform', 'Unknown').title(),
+
+            # Timing fields
+            'checkin_time': checkin_time,
+            'last_checkin': checkin_time,  # For backward compatibility
+            'activated_at': device.get('activated_at'),
+            'updated_time': device.get('updated_time'),
+
+            # PRE-COMPUTED: Days since checkin and connection status (performance optimization)
+            'days_since_checkin': computed_days_since,
+            'connection_status_info': computed_connection_status,
+
+            # Software data
+            'os_version': software.get('os_version', 'Unknown'),
+            'security_patch_level': software.get('security_patch_level'),
+            'latest_os_version': software.get('latest_os_version'),
+            'latest_security_patch_level': software.get('latest_security_patch_level'),
+            'sdk_version': software.get('sdk_version'),
+            'os_version_date': software.get('os_version_date'),
+            'rsr': software.get('rsr'),
+
+            # MDM information from Lookout API
+            'mdm_connector_id': details.get('mdm_connector_id'),
+            'mdm_connector_uuid': details.get('mdm_connector_uuid'),
+            'external_id': details.get('external_id'),
+
+            # Multi-tenant fields (added by device service if in multi-tenant mode)
+            'mdm_identifier': device.get('mdm_identifier'),
+            'mdm_provider': device.get('mdm_provider'),
+            'tenant_id': device.get('tenant_id'),
+            'tenant_name': device.get('tenant_name'),
+
+            # Hardware details
+            'manufacturer': hardware.get('manufacturer'),
+            'model': hardware.get('model'),
+
+            # Client/App information
+            'app_version': client.get('package_version'),
+            'package_name': client.get('package_name'),
+            'lookout_sdk_version': client.get('lookout_sdk_version'),
+            'ota_version': client.get('ota_version'),
+
+            # Status mappings
+            'risk_level': map_security_status(device.get('security_status')),
+            'security_status': device.get('security_status'),
+            'compliance_status': map_protection_status(
+                device.get('protection_status'),
+                computed_days_since,
+                activation_status,
+                risk_level_raw
+            ),
+            'protection_status': device.get('protection_status'),
+            'activation_status': device.get('activation_status', 'Unknown'),
+
+            # Additional useful fields
+            'locale': device.get('locale'),
+            'enterprise_guid': device.get('enterprise_guid'),
+            'device_group_guid': device.get('device_group_guid'),
+            'device_group_name': device.get('device_group_name'),
+            'mdm_type': device.get('mdm_type'),
+            'mdm_id': device.get('mdm_id'),
+            'profile_type': device.get('profile_type'),
+
+            # Enhanced threat information
+            'threats': device.get('threats', []),
+            'threat_family_names': [threat.get('family_name', '') for threat in device.get('threats', []) if threat.get('family_name')],
+            'threat_descriptions': [threat.get('description', '') for threat in device.get('threats', []) if threat.get('description')],
+
+            # Metadata for tracking
+            'oid': device.get('oid'),
+            'guid': device.get('guid'),
+        }
+
+        # Pre-compute risk analysis if requested (avoids recalculating in loops)
+        if precompute_analysis:
+            try:
+                from services.risk_service import RiskService
+                mapped_device['risk_analysis'] = RiskService.analyze_device_risk(mapped_device)
+            except Exception as e:
+                logger.debug(f"Could not pre-compute risk analysis: {e}")
+                # Risk analysis will be computed on-demand
+
+        return mapped_device
+
+    except Exception as e:
+        logger.error(f"Error in enhanced device mapping: {e}")
+        # Return basic mapping as fallback
+        return {
+            'device_name': device.get('guid', 'Unknown Device'),
+            'device_id': device.get('guid', ''),
+            'user_email': device.get('email', 'N/A'),
+            'platform': device.get('platform', 'Unknown'),
+            'risk_level': 'Unknown',
+            'checkin_time': device.get('checkin_time'),
+            'last_checkin': device.get('checkin_time'),
+            'os_version': 'Unknown',
+            'app_version': 'Unknown',
+            'compliance_status': 'Unknown',
+            'days_since_checkin': -1,
+            'connection_status_info': get_connection_status(-1)
+        }

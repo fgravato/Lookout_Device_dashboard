@@ -14,6 +14,7 @@ class TestDeviceWorkflow:
         # Setup mocks
         mock_service = MagicMock()
         mock_service.get_cached_devices.return_value = sample_devices
+        mock_service.get_or_refresh_devices.return_value = sample_devices
         mock_service.get_cache_stats.return_value = {
             'last_sync_time': '2024-01-15T10:00:00Z',
             'cache_age_minutes': 5,
@@ -69,9 +70,12 @@ class TestExportWorkflow:
             response = client.get('/api/export/excel')
             mock_send.assert_called_once()
         
-        # Cleanup
+        # Cleanup (route's after_this_request handler already removes the file)
         import os
-        os.unlink(tmp_path)
+        try:
+            os.unlink(tmp_path)
+        except FileNotFoundError:
+            pass
 
 
 class TestCacheWorkflow:
@@ -99,11 +103,11 @@ class TestCacheWorkflow:
         assert data['cached_devices'] == 100
         
         # Step 2: Refresh cache
-        response = client.get('/api/refresh')
+        response = client.post('/api/refresh')
         assert response.status_code == 200
         mock_service.fetch_and_cache_devices.assert_called_once()
-        
+
         # Step 3: Clear cache
-        response = client.get('/api/cache/clear')
+        response = client.post('/api/cache/clear')
         assert response.status_code == 200
         mock_cache.clear.assert_called_once()

@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 
 from config import get_config, print_config_summary
 from lookout_client import LookoutMRAClient, LookoutAPIError
-from device_cache import DeviceCache, enhanced_device_mapping
+from device_cache import DeviceCache
 from services.device_service import DeviceService
 from services.export import ExportService
 from services.cve_service import CVEService
@@ -133,7 +133,10 @@ def create_app(config_name: Optional[str] = None) -> Flask:
     
     device_service = DeviceService(config_class, device_cache, tenant_service)
     export_service = ExportService(device_service)
-    
+
+    cve_client = device_service.get_lookout_client()
+    cve_service = CVEService(cve_client) if cve_client else None
+
     app.extensions = {
         'config_class': config_class,
         'limiter': limiter,
@@ -142,17 +145,9 @@ def create_app(config_name: Optional[str] = None) -> Flask:
         'tenant_service': tenant_service,
         'device_service': device_service,
         'export_service': export_service,
-        'cve_service': None,
+        'cve_service': cve_service,
         'issue_service': None
     }
-
-    # Initialize blueprints with auth and limiter
-    cache.init_auth(auth_manager, limiter)
-    devices.init_auth(auth_manager, limiter)
-    tenants.init_auth(auth_manager, limiter)
-    export.init_auth(auth_manager, limiter)
-    cve.init_auth(auth_manager, limiter)
-    issues_routes.init_auth(auth_manager, limiter)
 
     # Register blueprints
     app.register_blueprint(health.bp)

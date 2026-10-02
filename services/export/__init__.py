@@ -60,26 +60,7 @@ class ExportService:
     
     def _get_devices_for_export(self) -> List[Dict]:
         """Get device data for export from API or sample data"""
-        config = self.device_service.config
-        
-        if config.USE_SAMPLE_DATA:
-            return self.device_service._load_sample_data()
-        
-        client = self.device_service.get_lookout_client()
-        if client is None:
-            raise Exception("API client not available")
-        
-        if not client.is_authenticated():
-            client.authenticate()
-        
-        logger.info("Fetching devices from Lookout API for export")
-        raw_devices = client.get_devices(limit=1000)
-        
-        from device_cache import enhanced_device_mapping
-        devices = [enhanced_device_mapping(device) for device in raw_devices]
-        logger.info(f"Successfully fetched {len(devices)} devices from API")
-        
-        return devices
+        return self.device_service.fetch_and_cache_devices()
     
     def _create_device_workbook(self, devices: List[Dict]) -> str:
         """Create Excel workbook with device data using sheet modules"""

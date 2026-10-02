@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch, mock_open
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from auth import AuthManager
+from auth.decorators import require_auth
 
 
 class TestAuthManager:
@@ -113,22 +114,24 @@ class TestAuthManager:
         assert not auth_manager.check_auth('nonexistent', 'password')
     
     def test_requires_auth_decorator_skips_when_auth_disabled(self, app):
-        """Test that requires_auth skips when AUTH_ENABLED is False"""
+        """Test that require_auth skips when AUTH_ENABLED is False"""
         config = MagicMock()
         config.AUTH_ENABLED = False
         config.AUTH_USERS_FILE = None
         config.AUTH_USERS = None
-        
+
         with patch.dict(os.environ, {'FLASK_ENV': 'development'}):
             auth_manager = AuthManager(config)
-        
+
         # Create a mock function to decorate
         mock_func = MagicMock(return_value='success')
-        decorated = auth_manager.requires_auth(mock_func)
-        
+        decorated = require_auth(mock_func)
+
         # Use Flask test request context
         with app.test_request_context():
+            app.extensions['auth_manager'] = auth_manager
+            app.extensions['config_class'] = config
             result = decorated()
-            
+
             assert result == 'success'
             mock_func.assert_called_once()

@@ -1,0 +1,6 @@
+-r requirements.txt
+
+# Testing dependencies
+pytest==7.4.3
+pytest-flask==1.3.0
+pytest-cov==4.1.0

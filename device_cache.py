@@ -2,7 +2,6 @@
 Device Cache Module for Lookout MRA Desktop Dashboard
 
 Provides in-memory caching with optional persistence for device data.
-Pre-computes risk analysis and connection status for performance.
 """
 
 import json
@@ -11,8 +10,6 @@ import threading
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 import logging
-
-from utils.time_utils import days_since_checkin, get_connection_status
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +27,7 @@ class DeviceCache:
             'cache_hits': 0,
             'cache_misses': 0
         }
+        self.tenant_sync_status: Dict[str, Dict] = {}  # {tenant_id: status_data}
         
         # Thread safety
         self._lock = threading.RLock()
@@ -247,196 +245,57 @@ class DeviceCache:
             })
             return stats
 
-
-def enhanced_device_mapping(device: Dict, precompute_analysis: bool = True) -> Dict:
-    """
-    Enhanced device mapping to extract all available API fields properly.
-    
-    Pre-computes days_since_checkin and connection_status_info for performance.
-    Risk analysis is computed once and cached in the device dict.
-    
-    Args:
-        device: Raw device data from API
-        precompute_analysis: If True, pre-compute risk analysis (default True)
-    
-    Returns:
-        Mapped device dict with pre-computed fields
-    """
-    try:
-        # Helper functions for status mapping
-        def map_security_status(status):
-            mapping = {
-                'SECURE': 'Secure',
-                'THREATS_LOW': 'Low',
-                'THREATS_MEDIUM': 'Medium',
-                'THREATS_HIGH': 'High',
-                'CRITICAL': 'Critical'
-            }
-            return mapping.get(status, 'Unknown')
-        
-        def map_protection_status(status, days_since, activation_status, risk_level):
-            """Enhanced compliance determination based on multiple factors"""
-            if not status:
-                return 'Unknown'
-
-            # Primary factor: Protection status from Lookout API
-            protection_mapping = {
-                'PROTECTED': 'Connected',
-                'DISCONNECTED': 'Disconnected',
-                'UNPROTECTED': 'Pending'
+    def record_tenant_sync_success(self, tenant_id: str, tenant_name: str, device_count: int):
+        """Record a successful device sync for a tenant"""
+        with self._lock:
+            self.tenant_sync_status[tenant_id] = {
+                'tenant_id': tenant_id,
+                'tenant_name': tenant_name,
+                'status': 'ok',
+                'last_success': datetime.now().isoformat(),
+                'last_error': None,
+                'error_message': None,
+                'device_count': device_count
             }
 
-            base_compliance = protection_mapping.get(status, 'Unknown')
+    def record_tenant_sync_failure(self, tenant_id: str, tenant_name: str, error_message: str):
+        """Record a failed device sync for a tenant, preserving last known good state"""
+        with self._lock:
+            existing = self.tenant_sync_status.get(tenant_id)
+            last_success = existing['last_success'] if existing else None
+            device_count = existing['device_count'] if existing else 0
 
-            # Enhanced compliance logic based on multiple factors
-            if status == 'PROTECTED':
-                # Fully compliant if low risk, recently active, and properly activated
-                if (risk_level in ['low', 'secure'] and
-                    days_since <= 7 and
-                    activation_status == 'activated'):
-                    return 'Fully Compliant'
-                elif days_since <= 30:
-                    return 'Connected'
-                elif risk_level in ['medium', 'high', 'critical']:
-                    return 'At-Risk'
-                else:
-                    return 'Connected'
+            self.tenant_sync_status[tenant_id] = {
+                'tenant_id': tenant_id,
+                'tenant_name': tenant_name,
+                'status': 'error',
+                'last_success': last_success,
+                'last_error': datetime.now().isoformat(),
+                'error_message': error_message,
+                'device_count': device_count
+            }
 
-            elif status == 'DISCONNECTED':
-                if days_since > 30:
-                    return 'Non-Compliant'
-                else:
-                    return 'Disconnected'
+    def get_tenant_sync_status(self) -> List[Dict]:
+        """Get sync status for all tenants"""
+        with self._lock:
+            return list(self.tenant_sync_status.values())
 
-            elif status == 'UNPROTECTED':
-                if activation_status != 'activated':
-                    return 'Pending Activation'
-                else:
-                    return 'Pending'
+    def purge_tenant_devices(self, tenant_id: str) -> int:
+        """Remove all cached devices and sync status for a tenant"""
+        with self._lock:
+            device_ids_to_remove = [
+                device_id for device_id, device in self.devices.items()
+                if device.get('tenant_id') == tenant_id
+            ]
+            for device_id in device_ids_to_remove:
+                del self.devices[device_id]
 
-            return base_compliance
-        
-        # Extract nested objects safely
-        software = device.get('software', {}) or {}
-        hardware = device.get('hardware', {}) or {}
-        client = device.get('client', {}) or {}
-        details = device.get('details', {}) or {}
-        
-        # Pre-compute days since checkin and connection status
-        checkin_time = device.get('checkin_time')
-        computed_days_since = days_since_checkin(checkin_time)
-        computed_connection_status = get_connection_status(computed_days_since)
-        
-        # Get values needed for compliance calculation
-        risk_level_raw = map_security_status(device.get('security_status')).lower()
-        activation_status = device.get('activation_status', 'Unknown').lower()
-        
-        mapped_device = {
-            # Basic device information
-            'device_name': (
-                device.get('customer_device_id') or 
-                f"Device-{device.get('guid', 'Unknown')[:8]}"
-            ),
-            'device_id': device.get('guid'),
-            'user_email': device.get('email', 'N/A'),
-            'platform': device.get('platform', 'Unknown').title(),
-            
-            # Timing fields
-            'checkin_time': checkin_time,
-            'last_checkin': checkin_time,  # For backward compatibility
-            'activated_at': device.get('activated_at'),
-            'updated_time': device.get('updated_time'),
-            
-            # PRE-COMPUTED: Days since checkin and connection status (performance optimization)
-            'days_since_checkin': computed_days_since,
-            'connection_status_info': computed_connection_status,
-            
-            # Software data
-            'os_version': software.get('os_version', 'Unknown'),
-            'security_patch_level': software.get('security_patch_level'),
-            'latest_os_version': software.get('latest_os_version'),
-            'latest_security_patch_level': software.get('latest_security_patch_level'),
-            'sdk_version': software.get('sdk_version'),
-            'os_version_date': software.get('os_version_date'),
-            'rsr': software.get('rsr'),
-            
-            # MDM information from Lookout API
-            'mdm_connector_id': details.get('mdm_connector_id'),
-            'mdm_connector_uuid': details.get('mdm_connector_uuid'),
-            'external_id': details.get('external_id'),
-            
-            # Multi-tenant fields (added by device service if in multi-tenant mode)
-            'mdm_identifier': device.get('mdm_identifier'),
-            'mdm_provider': device.get('mdm_provider'),
-            'tenant_id': device.get('tenant_id'),
-            'tenant_name': device.get('tenant_name'),
-            
-            # Hardware details
-            'manufacturer': hardware.get('manufacturer'),
-            'model': hardware.get('model'),
-            
-            # Client/App information
-            'app_version': client.get('package_version'),
-            'package_name': client.get('package_name'),
-            'lookout_sdk_version': client.get('lookout_sdk_version'),
-            'ota_version': client.get('ota_version'),
-            
-            # Status mappings
-            'risk_level': map_security_status(device.get('security_status')),
-            'security_status': device.get('security_status'),
-            'compliance_status': map_protection_status(
-                device.get('protection_status'),
-                computed_days_since,
-                activation_status,
-                risk_level_raw
-            ),
-            'protection_status': device.get('protection_status'),
-            'activation_status': device.get('activation_status', 'Unknown'),
-            
-            # Additional useful fields
-            'locale': device.get('locale'),
-            'enterprise_guid': device.get('enterprise_guid'),
-            'device_group_guid': device.get('device_group_guid'),
-            'device_group_name': device.get('device_group_name'),
-            'mdm_type': device.get('mdm_type'),
-            'mdm_id': device.get('mdm_id'),
-            'profile_type': device.get('profile_type'),
+            self.tenant_sync_status.pop(tenant_id, None)
 
-            # Enhanced threat information
-            'threats': device.get('threats', []),
-            'threat_family_names': [threat.get('family_name', '') for threat in device.get('threats', []) if threat.get('family_name')],
-            'threat_descriptions': [threat.get('description', '') for threat in device.get('threats', []) if threat.get('description')],
-            
-            # Metadata for tracking
-            'oid': device.get('oid'),
-            'guid': device.get('guid'),
-        }
-        
-        # Pre-compute risk analysis if requested (avoids recalculating in loops)
-        if precompute_analysis:
-            try:
-                from services.risk_service import RiskService
-                mapped_device['risk_analysis'] = RiskService.analyze_device_risk(mapped_device)
-            except Exception as e:
-                logger.debug(f"Could not pre-compute risk analysis: {e}")
-                # Risk analysis will be computed on-demand
-        
-        return mapped_device
-        
-    except Exception as e:
-        logger.error(f"Error in enhanced device mapping: {e}")
-        # Return basic mapping as fallback
-        return {
-            'device_name': device.get('guid', 'Unknown Device'),
-            'device_id': device.get('guid', ''),
-            'user_email': device.get('email', 'N/A'),
-            'platform': device.get('platform', 'Unknown'),
-            'risk_level': 'Unknown',
-            'checkin_time': device.get('checkin_time'),
-            'last_checkin': device.get('checkin_time'),
-            'os_version': 'Unknown',
-            'app_version': 'Unknown',
-            'compliance_status': 'Unknown',
-            'days_since_checkin': -1,
-            'connection_status_info': get_connection_status(-1)
-        }
+            self.cache_metadata['total_devices'] = len(self.devices)
+
+            if self.enable_persistence:
+                self._save_to_disk()
+
+            logger.info(f"Purged {len(device_ids_to_remove)} devices for tenant {tenant_id}")
+            return len(device_ids_to_remove)

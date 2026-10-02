@@ -5,8 +5,8 @@ Handles CVE vulnerability scanning and analysis for the device fleet.
 """
 
 import logging
+from datetime import datetime
 from typing import List, Dict, Any, Optional
-from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
@@ -147,154 +147,163 @@ class CVEService:
     
     def scan_fleet_vulnerabilities(self, devices: List[Dict], min_severity: int = 7) -> Dict[str, Any]:
         """
-        Scan entire fleet for CVE vulnerabilities based on OS versions
-        
+        Scan entire fleet for CVE vulnerabilities based on OS versions and security patch levels
+
         Args:
             devices: List of device dictionaries
             min_severity: Minimum CVE severity to report (0-10), default 7 (High+Critical)
-            
+
         Returns:
-            Dictionary with vulnerability analysis
+            Vulnerability report dictionary with summary, top_cves, all_vulnerabilities, scan_metadata
         """
         logger.info(f"Starting fleet CVE scan with min_severity={min_severity}")
-        
-        # Group devices by OS version and security patch
-        android_by_patch = defaultdict(list)
-        ios_by_version = defaultdict(list)
-        
+
+        android_patches = set()
+        ios_versions = set()
+
         for device in devices:
             platform = device.get('platform', '').lower()
-            
+
             if platform == 'android':
-                patch_level = device.get('security_patch_level')
-                if patch_level and patch_level != 'N/A':
-                    android_by_patch[patch_level].append(device)
+                patch_level = device.get('security_patch_level', '')
+                if patch_level:
+                    android_patches.add(patch_level)
             elif platform == 'ios':
-                os_version = device.get('os_version')
-                if os_version and os_version != 'Unknown':
-                    ios_by_version[os_version].append(device)
-        
-        logger.info(f"Grouped devices: {len(android_by_patch)} Android patches, {len(ios_by_version)} iOS versions")
-        
-        # Scan vulnerabilities for each unique OS version/patch
-        vulnerability_summary = {
-            'total_devices_scanned': len(devices),
-            'android_patches_scanned': len(android_by_patch),
-            'ios_versions_scanned': len(ios_by_version),
-            'vulnerabilities_by_severity': defaultdict(int),
-            'top_cves': [],
-            'affected_devices_count': 0,
-            'vulnerabilities_found': []
-        }
-        
-        cve_device_map = defaultdict(set)  # Track unique devices per CVE
-        
-        # Scan Android devices
-        for patch_level, patch_devices in android_by_patch.items():
-            logger.info(f"Scanning Android patch level {patch_level} ({len(patch_devices)} devices)")
-            vulns = self.get_vulnerabilities_for_android_patch(patch_level, min_severity)
-            logger.info(f"Found {len(vulns)} vulnerabilities for Android patch {patch_level}")
-            
+                os_version = device.get('os_version', '')
+                if os_version:
+                    ios_versions.add(os_version)
+
+        # Index devices by patch/version for efficient lookup
+        devices_by_android_patch = {}
+        devices_by_ios_version = {}
+        for device in devices:
+            platform = device.get('platform', '').lower()
+            if platform == 'android':
+                pl = device.get('security_patch_level', '')
+                if pl:
+                    devices_by_android_patch.setdefault(pl, []).append(device)
+            elif platform == 'ios':
+                ov = device.get('os_version', '')
+                if ov:
+                    devices_by_ios_version.setdefault(ov, []).append(device)
+
+        all_vulnerabilities = []
+        affected_devices = set()
+        cve_device_map = {}  # cve_id -> set of device_ids
+
+        for patch in android_patches:
+            vulns = self.get_vulnerabilities_for_android_patch(patch, min_severity)
+            patch_devices = devices_by_android_patch.get(patch, [])
             for vuln_wrapper in vulns:
-                # Extract nested vulnerability object if present
+                # Unwrap nested vulnerability object
                 vuln = vuln_wrapper.get('vulnerability', vuln_wrapper) if isinstance(vuln_wrapper, dict) else vuln_wrapper
-                
-                # Try different field names for CVE identifier
-                cve_name = vuln.get('name') or vuln.get('cve') or vuln.get('cve_id') or vuln.get('id')
-                if not cve_name:
-                    logger.warning(f"No CVE name found in vulnerability: {vuln.keys()}")
-                    continue
-                
-                severity = float(vuln.get('severity', 0) or vuln.get('cvss_score', 0) or 0)
-                
-                # Track severity distribution
-                if severity >= 9:
-                    vulnerability_summary['vulnerabilities_by_severity']['Critical'] += 1
-                elif severity >= 7:
-                    vulnerability_summary['vulnerabilities_by_severity']['High'] += 1
-                elif severity >= 4:
-                    vulnerability_summary['vulnerabilities_by_severity']['Medium'] += 1
-                else:
-                    vulnerability_summary['vulnerabilities_by_severity']['Low'] += 1
-                
-                # Track affected devices
-                for device in patch_devices:
-                    cve_device_map[cve_name].add(device.get('device_id'))
-                
-                # Add to vulnerabilities list
-                vulnerability_summary['vulnerabilities_found'].append({
-                    'cve': cve_name,
+                cve_id = vuln.get('name') or vuln.get('cve') or vuln.get('cve_id') or 'Unknown'
+                severity = float(vuln.get('severity', 0) or 0)
+
+                all_vulnerabilities.append({
+                    'cve': cve_id,
                     'severity': severity,
                     'severity_label': self._severity_label(severity),
+                    'description': vuln.get('description', ''),
+                    'summary': vuln.get('summary', ''),
+                    'category': vuln.get('category', ''),
+                    'classification': vuln.get('classification', ''),
                     'platform': 'Android',
-                    'patch_level': patch_level,
-                    'affected_device_count': len(patch_devices),
-                    'description': vuln.get('description', '') or vuln.get('summary', '') or 'No description available'
+                    'patch_level': patch,
+                    'affected_device_count': len(patch_devices)
                 })
-        
-        # Scan iOS devices
-        for ios_version, version_devices in ios_by_version.items():
-            logger.info(f"Scanning iOS version {ios_version} ({len(version_devices)} devices)")
-            vulns = self.get_vulnerabilities_for_ios_version(ios_version, min_severity)
-            logger.info(f"Found {len(vulns)} vulnerabilities for iOS {ios_version}")
-            
+
+                if cve_id not in cve_device_map:
+                    cve_device_map[cve_id] = set()
+                for d in patch_devices:
+                    did = d.get('device_id')
+                    if did:
+                        cve_device_map[cve_id].add(did)
+                        affected_devices.add(did)
+
+        for version in ios_versions:
+            vulns = self.get_vulnerabilities_for_ios_version(version, min_severity)
+            ver_devices = devices_by_ios_version.get(version, [])
             for vuln_wrapper in vulns:
-                # Extract nested vulnerability object if present
+                # Unwrap nested vulnerability object
                 vuln = vuln_wrapper.get('vulnerability', vuln_wrapper) if isinstance(vuln_wrapper, dict) else vuln_wrapper
-                
-                # Try different field names for CVE identifier
-                cve_name = vuln.get('name') or vuln.get('cve') or vuln.get('cve_id') or vuln.get('id')
-                if not cve_name:
-                    logger.warning(f"No CVE name found in vulnerability: {vuln.keys()}")
-                    continue
-                
-                severity = float(vuln.get('severity', 0) or vuln.get('cvss_score', 0) or 0)
-                
-                # Track severity distribution
-                if severity >= 9:
-                    vulnerability_summary['vulnerabilities_by_severity']['Critical'] += 1
-                elif severity >= 7:
-                    vulnerability_summary['vulnerabilities_by_severity']['High'] += 1
-                elif severity >= 4:
-                    vulnerability_summary['vulnerabilities_by_severity']['Medium'] += 1
-                else:
-                    vulnerability_summary['vulnerabilities_by_severity']['Low'] += 1
-                
-                # Track affected devices
-                for device in version_devices:
-                    cve_device_map[cve_name].add(device.get('device_id'))
-                
-                # Add to vulnerabilities list
-                vulnerability_summary['vulnerabilities_found'].append({
-                    'cve': cve_name,
+                cve_id = vuln.get('name') or vuln.get('cve') or vuln.get('cve_id') or 'Unknown'
+                severity = float(vuln.get('severity', 0) or 0)
+
+                all_vulnerabilities.append({
+                    'cve': cve_id,
                     'severity': severity,
                     'severity_label': self._severity_label(severity),
+                    'description': vuln.get('description', ''),
+                    'summary': vuln.get('summary', ''),
+                    'category': vuln.get('category', ''),
+                    'classification': vuln.get('classification', ''),
                     'platform': 'iOS',
-                    'os_version': ios_version,
-                    'affected_device_count': len(version_devices),
-                    'description': vuln.get('description', '') or vuln.get('summary', '') or 'No description available'
+                    'os_version': version,
+                    'affected_device_count': len(ver_devices)
                 })
-        
-        # Calculate total unique affected devices (deduplicated across all CVEs)
-        all_affected_devices = set()
-        for devices_set in cve_device_map.values():
-            all_affected_devices.update(devices_set)
-        vulnerability_summary['affected_devices_count'] = len(all_affected_devices)
-        
-        logger.info(f"Total unique devices affected: {len(all_affected_devices)}")
-        
-        # Get top CVEs by affected device count
-        cve_counts = [(cve, len(device_ids)) for cve, device_ids in cve_device_map.items()]
-        cve_counts.sort(key=lambda x: x[1], reverse=True)
-        vulnerability_summary['top_cves'] = [
-            {'cve': cve, 'affected_devices': count}
-            for cve, count in cve_counts[:10]
-        ]
-        
-        logger.info(f"Fleet scan complete: {len(vulnerability_summary['vulnerabilities_found'])} vulnerabilities found")
-        
-        return vulnerability_summary
-    
+
+                if cve_id not in cve_device_map:
+                    cve_device_map[cve_id] = set()
+                for d in ver_devices:
+                    did = d.get('device_id')
+                    if did:
+                        cve_device_map[cve_id].add(did)
+                        affected_devices.add(did)
+
+        severity_counts = {'Critical': 0, 'High': 0, 'Medium': 0, 'Low': 0}
+        for vuln in all_vulnerabilities:
+            severity = vuln.get('severity', 0)
+            if severity >= 9:
+                severity_counts['Critical'] += 1
+            elif severity >= 7:
+                severity_counts['High'] += 1
+            elif severity >= 4:
+                severity_counts['Medium'] += 1
+            else:
+                severity_counts['Low'] += 1
+
+        # Deduplicate CVEs and count unique affected devices per CVE
+        cve_summary = {}
+        for vuln in all_vulnerabilities:
+            cve_id = vuln['cve']
+            if cve_id not in cve_summary:
+                cve_summary[cve_id] = {
+                    'severity': vuln['severity'],
+                    'device_ids': cve_device_map.get(cve_id, set())
+                }
+            else:
+                cve_summary[cve_id]['device_ids'].update(cve_device_map.get(cve_id, set()))
+
+        top_cves = sorted(
+            [{'cve': cve_id, 'affected_devices': len(data['device_ids']), 'severity': data['severity']}
+             for cve_id, data in cve_summary.items()],
+            key=lambda x: (x['severity'], x['affected_devices']),
+            reverse=True
+        )[:10]
+
+        unique_cve_count = len(cve_summary)
+
+        logger.info(f"Fleet scan complete: {len(all_vulnerabilities)} vulnerabilities found across {unique_cve_count} unique CVEs")
+
+        return {
+            'summary': {
+                'total_devices': len(devices),
+                'devices_with_vulnerabilities': len(affected_devices),
+                'vulnerability_percentage': round(len(affected_devices) / len(devices) * 100, 1) if devices else 0,
+                'total_cves_found': unique_cve_count,
+                'severity_breakdown': severity_counts
+            },
+            'top_cves': top_cves,
+            'all_vulnerabilities': all_vulnerabilities,
+            'scan_metadata': {
+                'android_patches_scanned': len(android_patches),
+                'ios_versions_scanned': len(ios_versions),
+                'minimum_severity': min_severity,
+                'scan_time': datetime.now().isoformat()
+            }
+        }
+
     def _severity_label(self, severity: float) -> str:
         """Convert numeric severity to label"""
         if severity >= 9:
@@ -305,40 +314,3 @@ class CVEService:
             return 'Medium'
         else:
             return 'Low'
-    
-    def get_vulnerability_report(self, devices: List[Dict], min_severity: int = 7) -> Dict[str, Any]:
-        """
-        Generate comprehensive vulnerability report for the fleet
-        
-        Args:
-            devices: List of device dictionaries
-            min_severity: Minimum severity threshold
-            
-        Returns:
-            Formatted report with summary and details
-        """
-        scan_results = self.scan_fleet_vulnerabilities(devices, min_severity)
-        
-        # Calculate additional metrics
-        total_devices = scan_results['total_devices_scanned']
-        affected_count = scan_results['affected_devices_count']
-        affected_percentage = (affected_count / total_devices * 100) if total_devices > 0 else 0
-        
-        report = {
-            'summary': {
-                'total_devices': total_devices,
-                'devices_with_vulnerabilities': affected_count,
-                'vulnerability_percentage': round(affected_percentage, 2),
-                'total_cves_found': len(set([v['cve'] for v in scan_results['vulnerabilities_found']])),
-                'severity_breakdown': dict(scan_results['vulnerabilities_by_severity'])
-            },
-            'top_cves': scan_results['top_cves'],
-            'all_vulnerabilities': scan_results['vulnerabilities_found'],
-            'scan_metadata': {
-                'android_patches_scanned': scan_results['android_patches_scanned'],
-                'ios_versions_scanned': scan_results['ios_versions_scanned'],
-                'minimum_severity': min_severity
-            }
-        }
-        
-        return report

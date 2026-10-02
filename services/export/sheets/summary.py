@@ -11,6 +11,7 @@ from openpyxl.styles import Font, PatternFill
 
 from services.export.base import ExcelStyles, get_connection_status_info
 from services.risk_service import RiskService
+from utils.time_utils import days_since_checkin
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ class SummarySheet:
         platform_counts = {}
         risk_counts = {}
         compliance_counts = {}
-        connection_counts = {'connected': 0, 'recent': 0, 'stale': 0, 'disconnected': 0, 'very_stale': 0}
+        connection_counts = {'never_connected': 0, 'connected': 0, 'recent': 0, 'stale': 0, 'disconnected': 0, 'very_stale': 0}
         mdm_counts = {}
         tenant_counts = {}
         total_issues = 0
@@ -60,22 +61,9 @@ class SummarySheet:
             tenant_counts[tenant_name] = tenant_counts.get(tenant_name, 0) + 1
             
             # Calculate connection status
-            try:
-                last_checkin = datetime.fromisoformat((device['last_checkin'] or '').replace('Z', '+00:00'))
-                days_since = (datetime.now().replace(tzinfo=last_checkin.tzinfo) - last_checkin).days
-            except (ValueError, KeyError, TypeError):
-                days_since = -1
-            
-            if days_since <= 1:
-                connection_counts['connected'] += 1
-            elif days_since <= 7:
-                connection_counts['recent'] += 1
-            elif days_since <= 30:
-                connection_counts['stale'] += 1
-            elif days_since <= 90:
-                connection_counts['disconnected'] += 1
-            else:
-                connection_counts['very_stale'] += 1
+            days_since = days_since_checkin(device.get('last_checkin'))
+            status = get_connection_status_info(days_since)['status']
+            connection_counts[status] = connection_counts.get(status, 0) + 1
             
             risk_analysis = RiskService.analyze_device_risk(device)
             total_issues += risk_analysis.get('total_issues', 0)

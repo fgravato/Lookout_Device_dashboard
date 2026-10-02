@@ -6,21 +6,13 @@ import logging
 import os
 from datetime import datetime
 from flask import Blueprint, jsonify, request, send_file, after_this_request, g, current_app
-from flask_limiter import Limiter
 
-from auth import AuthManager, require_auth
+from auth import require_auth
 from services.export import ExportService
 from utils.device_filters import filter_devices_for_export
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('export', __name__)
-limiter = None
-
-
-def init_auth(manager: AuthManager, lim: Limiter):
-    """Initialize auth manager and limiter"""
-    global limiter
-    limiter = lim
 
 
 @bp.route('/export/<format_type>')
@@ -33,11 +25,8 @@ def export_data(format_type):
         config_class = current_app.extensions['config_class']
         
         cache_max_age = config_class.CACHE_MAX_AGE_MINUTES
-        devices = device_service.get_cached_devices(cache_max_age)
-        
-        if devices is None:
-            devices = device_service.fetch_and_cache_devices()
-        
+        devices = device_service.get_or_refresh_devices(cache_max_age)
+
         if format_type == 'excel':
             filepath = export_service.export_devices_to_excel(request.args, devices)
 

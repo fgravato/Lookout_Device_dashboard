@@ -24,9 +24,9 @@ Flask web application for managing mobile devices via the Lookout Mobile Risk AP
 ### macOS / Linux
 
 ```bash
-# Extract the zip file
-unzip Lookout-Reporting_tool_version1.zip
-cd Lookout-Reporting_tool_version1
+# Extract the archive
+tar -xzf lookout-mra-dashboard-v1.0.0.tar.gz
+cd lookout-mra-dashboard-v1.0.0
 
 # Create a virtual environment (recommended)
 python3 -m venv venv
@@ -43,8 +43,9 @@ pip install -r requirements.txt
 **Option A — Using Command Prompt:**
 
 ```cmd
-:: Extract the zip file to a folder, then open Command Prompt and navigate to it
-cd C:\Users\YourName\Downloads\Lookout-Reporting_tool_version1
+:: Extract the archive (tar -xzf works in modern Command Prompt), then navigate to it
+tar -xzf lookout-mra-dashboard-v1.0.0.tar.gz
+cd C:\Users\YourName\Downloads\lookout-mra-dashboard-v1.0.0
 
 :: Create a virtual environment
 python -m venv venv
@@ -59,8 +60,9 @@ pip install -r requirements.txt
 **Option B — Using PowerShell:**
 
 ```powershell
-# Extract the zip file to a folder, then open PowerShell and navigate to it
-cd C:\Users\YourName\Downloads\Lookout-Reporting_tool_version1
+# Extract the archive, then open PowerShell and navigate to it
+tar -xzf lookout-mra-dashboard-v1.0.0.tar.gz
+cd C:\Users\YourName\Downloads\lookout-mra-dashboard-v1.0.0
 
 # Create a virtual environment
 python -m venv venv
@@ -90,7 +92,6 @@ If you see `Flask 3.0.0`, the installation was successful.
 | requests 2.31 | HTTP client for Lookout API |
 | openpyxl 3.1 | Excel file generation |
 | python-dotenv 1.0 | Environment variable management |
-| Flask-HTTPAuth 4.8 | HTTP Basic authentication |
 | Flask-Limiter 3.5 | API rate limiting |
 | python-dateutil 2.8 | Date/time utilities |
 
@@ -119,10 +120,12 @@ Open `.env` in any text editor and update the values for your environment.
 | `AUTH_ENABLED` | `false` | Enable HTTP Basic authentication |
 | `AUTH_USERS` | — | User credentials in format `user:pass,user2:pass2` |
 | `HOST` | `127.0.0.1` | Server bind address |
-| `PORT` | `5000` | Server port |
+| `PORT` | `5001` | Server port |
 | `DEBUG` | `false` | Enable Flask debug mode |
 | `FLASK_ENV` | `default` | Environment: `development`, `production`, or `testing` |
 | `LOG_LEVEL` | `INFO` | Logging level: DEBUG, INFO, WARNING, ERROR |
+
+> **Security note:** If `AUTH_ENABLED=true` but no `AUTH_USERS` or `AUTH_USERS_FILE` is configured, `auth/manager.py` falls back to demo credentials (`admin`/`admin123`, `user`/`user123`) in non-production environments. This is intended for local development only — for production or customer-facing use, set `AUTH_ENABLED=true` **and** configure `AUTH_USERS` or `AUTH_USERS_FILE` with real credentials.
 
 ### Cache Settings
 
@@ -253,7 +256,7 @@ GET /api/devices?platform=IOS&security_status=THREATS_HIGH&min_last_seen_days=7&
 ## Project Structure
 
 ```
-Lookout-Reporting_tool_version1/
+lookout-mra-dashboard-v1.0.0/
 ├── app.py                  # App factory (create_app), error handlers, background refresh
 ├── config.py               # Configuration classes (Dev/Prod/Test) from env vars
 ├── run_dashboard.py        # Production launcher with dependency checks

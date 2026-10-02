@@ -5,6 +5,8 @@ Integration tests for the Flask application factory.
 import pytest
 from unittest.mock import MagicMock, patch
 
+from services.tenant_service import Tenant
+
 
 class TestAppFactory:
     """Test suite for application factory"""
@@ -94,3 +96,50 @@ class TestAppConfiguration:
 
             # Config validation should have been called
             mock_config.validate_config.assert_called_once()
+
+    def test_cve_service_available_in_multi_tenant_mode_without_global_key(self, monkeypatch):
+        """Multi-tenant deployments have no global LOOKOUT_APPLICATION_KEY (per-tenant
+        keys live in tenants.json instead). LookoutMRAClient.__init__ raises when
+        neither an explicit application_key nor the env var is set, so this only
+        proves the fix if the real __init__ validation runs (not mocked away) -
+        cve_service must still be constructed using a tenant's client, not left None."""
+        monkeypatch.delenv('LOOKOUT_APPLICATION_KEY', raising=False)
+
+        from lookout_client import LookoutMRAClient
+
+        with patch('app.get_config') as mock_get_config, \
+             patch('app.TenantService') as mock_tenant_service_cls, \
+             patch.object(LookoutMRAClient, 'authenticate', return_value=None), \
+             patch.object(LookoutMRAClient, 'is_authenticated', return_value=True):
+
+            mock_config = MagicMock()
+            mock_config.validate_config.return_value = []
+            mock_config.TESTING = True
+            mock_config.AUTH_ENABLED = False
+            mock_config.CACHE_ENABLED = False
+            mock_config.USE_SAMPLE_DATA = False
+            mock_config.SECRET_KEY = 'test'
+            mock_config.CACHE_MAX_AGE_MINUTES = 60
+            mock_config.BACKGROUND_REFRESH_ENABLED = False
+            mock_config.AUTO_REFRESH_ON_STARTUP = False
+            mock_config.ENABLE_DISK_CACHE = False
+            mock_config.CACHE_FILE_PATH = None
+            mock_config.ENABLE_MULTI_TENANT = True
+            mock_config.LOOKOUT_APPLICATION_KEY = None
+            mock_config.LOG_LEVEL = 'INFO'
+            mock_config.LOG_FILE = None
+            mock_get_config.return_value = mock_config
+
+            tenant = Tenant(
+                tenant_id='tenant_1', tenant_name='Company A', mdm_provider='InTune',
+                mdm_identifier='intune-a', lookout_application_key='tenant-key', enabled=True
+            )
+            mock_tenant_service = MagicMock()
+            mock_tenant_service.tenants = [tenant]
+            mock_tenant_service.get_all_tenants.return_value = [tenant]
+            mock_tenant_service_cls.return_value = mock_tenant_service
+
+            from app import create_app
+            app = create_app('testing')
+
+            assert app.extensions['cve_service'] is not None

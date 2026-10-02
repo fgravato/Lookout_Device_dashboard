@@ -4,20 +4,12 @@ Cache management routes.
 
 import logging
 from flask import Blueprint, jsonify, request, g, current_app
-from flask_limiter import Limiter
 from datetime import datetime
 
-from auth import AuthManager, require_auth
+from auth import require_auth
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('cache', __name__)
-limiter = None
-
-
-def init_auth(manager: AuthManager, lim: Limiter):
-    """Initialize auth manager and limiter"""
-    global limiter
-    limiter = lim
 
 
 @bp.route('/refresh', methods=['POST'])

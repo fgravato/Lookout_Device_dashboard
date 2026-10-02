@@ -451,3 +451,10 @@ body {
     background: rgba(255, 255, 255, 0.2);
     border-radius: 3px;
 }
+
+/* Other-CVEs popover on the CVE details modal's affected devices table */
+.other-cves-popover-list {
+    max-height: 220px;
+    overflow-y: auto;
+    min-width: 180px;
+}

@@ -8,6 +8,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from typing import Dict, Any
 
+from utils.time_utils import get_connection_status
+
 
 class ExcelStyles:
     """Shared Excel styling utilities"""
@@ -68,15 +70,4 @@ class ExcelStyles:
 
 def get_connection_status_info(days_since: int) -> Dict[str, str]:
     """Get connection status information for export"""
-    if days_since == -1:
-        return {'status': 'never_connected', 'label': 'Never Connected'}
-    elif days_since <= 1:
-        return {'status': 'connected', 'label': 'Connected'}
-    elif days_since <= 7:
-        return {'status': 'recent', 'label': 'Recent'}
-    elif days_since <= 30:
-        return {'status': 'stale', 'label': 'Stale'}
-    elif days_since <= 90:
-        return {'status': 'disconnected', 'label': 'Disconnected'}
-    else:
-        return {'status': 'very_stale', 'label': 'Very Stale'}
+    return get_connection_status(days_since)

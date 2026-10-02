@@ -4,20 +4,12 @@ Issue (Threat) routes.
 
 import logging
 from flask import Blueprint, jsonify, request, current_app
-from flask_limiter import Limiter
 
-from auth import AuthManager, require_auth
+from auth import require_auth
 from services.issue_service import IssueService
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('issues', __name__)
-limiter = None
-
-
-def init_auth(manager: AuthManager, lim: Limiter):
-    """Initialize auth manager and limiter"""
-    global limiter
-    limiter = lim
 
 
 def get_issue_service():
