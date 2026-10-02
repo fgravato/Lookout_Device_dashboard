@@ -2494,85 +2494,381 @@ class CVEScanner {
 // Issues (Threats) functionality
 class IssuesManager {
     constructor() {
+        this.pageSize = 50;
+        this.offset = 0;
+        this.total = 0;
         this.initEventListeners();
     }
 
     initEventListeners() {
         const refreshBtn = document.getElementById('refreshIssuesBtn');
         if (refreshBtn) {
-            refreshBtn.addEventListener('click', () => this.loadIssues());
+            refreshBtn.addEventListener('click', () => this.loadIssues(true, true));
+        }
+        const exportBtn = document.getElementById('exportIssuesBtn');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => this.exportCsv());
+        }
+        const prevBtn = document.getElementById('issuesPrevBtn');
+        if (prevBtn) {
+            prevBtn.addEventListener('click', () => {
+                this.offset = Math.max(0, this.offset - this.pageSize);
+                this.loadIssues(false);
+            });
+        }
+        const nextBtn = document.getElementById('issuesNextBtn');
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => {
+                this.offset = this.offset + this.pageSize;
+                this.loadIssues(false);
+            });
+        }
+        const queryInput = document.getElementById('issueQueryFilter');
+        if (queryInput) {
+            queryInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    this.loadIssues(true);
+                }
+            });
         }
     }
 
-    async loadIssues() {
-        const risk = document.getElementById('issueRiskFilter').value;
-        const status = document.getElementById('issueStatusFilter').value;
-        const threatType = document.getElementById('issueThreatTypeFilter').value;
+    currentFilters() {
+        const valueOf = (id) => {
+            const el = document.getElementById(id);
+            return el ? el.value.trim() : '';
+        };
+        const filters = {};
+        const mapping = {
+            risk: 'issueRiskFilter',
+            status: 'issueStatusFilter',
+            threat_type: 'issueThreatTypeFilter',
+            classification: 'issueClassificationFilter',
+            platform: 'issuePlatformFilter',
+            query: 'issueQueryFilter'
+        };
+        Object.entries(mapping).forEach(([param, id]) => {
+            const value = valueOf(id);
+            if (value) filters[param] = value;
+        });
+        return filters;
+    }
 
+    buildParams(extra) {
+        const params = new URLSearchParams();
+        params.set('limit', String(this.pageSize));
+        params.set('offset', String(this.offset));
+        Object.entries(this.currentFilters()).forEach(([key, value]) => {
+            params.set(key, value);
+        });
+        Object.entries(extra || {}).forEach(([key, value]) => {
+            params.set(key, value);
+        });
+        return params;
+        const mapping = {
+            risk: 'issueRiskFilter',
+            status: 'issueStatusFilter',
+            threat_type: 'issueThreatTypeFilter',
+            classification: 'issueClassificationFilter',
+            platform: 'issuePlatformFilter',
+            query: 'issueQueryFilter'
+        };
+        Object.entries(mapping).forEach(([param, id]) => {
+            const value = valueOf(id);
+            if (value) params.set(param, value);
+        });
+        return params;
+    }
+
+    async loadIssues(resetPage, bypassCache) {
+        if (resetPage) {
+            this.offset = 0;
+        }
+        const extra = bypassCache ? { refresh: '1' } : {};
         document.getElementById('issuesPlaceholder').style.display = 'none';
         document.getElementById('issuesTableCard').style.display = 'none';
+        document.getElementById('issuesErrorAlert').style.display = 'none';
         document.getElementById('issuesLoadingIndicator').style.display = 'block';
         document.getElementById('refreshIssuesBtn').disabled = true;
 
         try {
-            const params = new URLSearchParams();
-            if (risk) params.set('risk', risk);
-            if (status) params.set('status', status);
-            if (threatType) params.set('threat_type', threatType);
-
-            const response = await fetch(`/api/issues?${params.toString()}`);
+            const response = await fetch(`/api/issues?${this.buildParams(extra).toString()}`);
             if (!response.ok) {
-                throw new Error(`Failed to load issues: ${response.statusText}`);
+                let message = response.statusText;
+                try {
+                    const body = await response.json();
+                    if (body && body.error && body.error.message) {
+                        message = body.error.message;
+                    }
+                } catch (parseError) {
+                    console.error('Issues error parse failure:', parseError);
+                }
+                throw new Error(`Failed to load issues: ${message}`);
             }
 
             const data = await response.json();
-            this.displayResults(data.issues || []);
+            this.total = data.total || 0;
+            this.displayResults(data);
 
         } catch (error) {
             console.error('Issues load error:', error);
             document.getElementById('issuesLoadingIndicator').style.display = 'none';
-            document.getElementById('issuesPlaceholder').style.display = 'block';
+            const alertBox = document.getElementById('issuesErrorAlert');
+            alertBox.textContent = error.message;
+            alertBox.style.display = 'block';
         } finally {
             document.getElementById('refreshIssuesBtn').disabled = false;
         }
     }
 
-    displayResults(issues) {
+    riskBadgeClass(risk) {
+        switch ((risk || '').toUpperCase()) {
+            case 'HIGH': return 'bg-danger';
+            case 'MEDIUM': return 'bg-warning text-dark';
+            case 'LOW': return 'bg-info text-dark';
+            case 'ADVISORY': return 'bg-secondary';
+            default: return 'bg-light text-dark';
+        }
+    }
+
+    displayResults(data) {
         document.getElementById('issuesLoadingIndicator').style.display = 'none';
+        const issues = data.issues || [];
+        this.currentIssues = issues;
+        this.renderSummary(data.summary);
 
         if (issues.length === 0) {
-            document.getElementById('issuesPlaceholder').style.display = 'block';
             document.getElementById('issuesTableCard').style.display = 'none';
+            document.getElementById('issuesPlaceholderTitle').textContent =
+                data.total === 0 ? 'No Threats Found' : 'No Results On This Page';
+            document.getElementById('issuesPlaceholderText').textContent =
+                data.total === 0
+                    ? 'No threats match the current filters. Widen the filters and refresh.'
+                    : 'This page is empty. Go back to see earlier results.';
+            document.getElementById('issuesPlaceholder').style.display = 'block';
             return;
         }
 
         const tbody = document.getElementById('issuesTableBody');
         tbody.replaceChildren();
 
-        issues.forEach(issue => {
+        issues.forEach((issue, index) => {
             const row = document.createElement('tr');
+            row.style.cursor = 'pointer';
+            row.addEventListener('click', () => this.openDetail(index));
+
             const deviceId = issue.device_guid || (issue.device && issue.device.guid) || 'N/A';
             const info = issue.device_info || {};
             const deviceLabel = info.device_name || (deviceId !== 'N/A' ? `Device-${deviceId.slice(0, 8)}` : 'N/A');
             const deviceDetail = [info.platform, info.model].filter(Boolean).join(' ');
-            const values = [
-                deviceDetail ? `${deviceLabel} (${deviceDetail})` : deviceLabel,
-                info.owner_email || 'N/A',
-                issue.classification || 'N/A',
-                issue.type || 'N/A',
-                issue.risk || 'N/A',
-                issue.status || 'N/A',
-                issue.detected_at || issue.created_time || 'N/A'
-            ];
-            values.forEach(value => {
+            const deviceCell = document.createElement('td');
+            deviceCell.textContent = deviceDetail ? `${deviceLabel} (${deviceDetail})` : deviceLabel;
+            row.appendChild(deviceCell);
+
+            const ownerCell = document.createElement('td');
+            if (info.owner_email) {
+                ownerCell.textContent = info.owner_email;
+            } else {
+                const unowned = document.createElement('span');
+                unowned.className = 'badge bg-warning text-dark';
+                unowned.textContent = 'Unassigned';
+                ownerCell.appendChild(unowned);
+            }
+            row.appendChild(ownerCell);
+
+            [issue.classification, issue.type].forEach(value => {
                 const cell = document.createElement('td');
-                cell.textContent = value;
+                cell.textContent = value || 'N/A';
                 row.appendChild(cell);
             });
+
+            const riskCell = document.createElement('td');
+            const badge = document.createElement('span');
+            badge.className = `badge ${this.riskBadgeClass(issue.risk)}`;
+            badge.textContent = issue.risk || 'N/A';
+            riskCell.appendChild(badge);
+            row.appendChild(riskCell);
+
+            const statusCell = document.createElement('td');
+            statusCell.textContent = issue.status || 'N/A';
+            row.appendChild(statusCell);
+
+            const detectedCell = document.createElement('td');
+            const detected = issue.detected_at || issue.created_time || '';
+            detectedCell.textContent = detected ? this.timeAgo(detected) : 'N/A';
+            if (detected) {
+                detectedCell.title = detected;
+            }
+            if (issue.is_new) {
+                const newBadge = document.createElement('span');
+                newBadge.className = 'badge bg-success ms-1';
+                newBadge.textContent = 'NEW';
+                detectedCell.appendChild(newBadge);
+            }
+            row.appendChild(detectedCell);
+
             tbody.appendChild(row);
         });
 
+        const shownFrom = data.offset + 1;
+        const shownTo = data.offset + issues.length;
+        document.getElementById('issuesCountLine').textContent =
+            `Showing ${shownFrom}–${shownTo} of ${data.total}`;
+        document.getElementById('issuesPrevBtn').disabled = data.offset <= 0;
+        document.getElementById('issuesNextBtn').disabled = (data.offset + issues.length) >= data.total;
+
         document.getElementById('issuesTableCard').style.display = 'block';
+    }
+
+    renderSummary(summary) {
+        const row = document.getElementById('issuesSummaryRow');
+        if (!summary) {
+            row.style.display = 'none';
+            return;
+        }
+        document.getElementById('issuesOpenHighCount').textContent = summary.open_high || 0;
+        document.getElementById('issuesNewCount').textContent = summary.new_24h || 0;
+        document.getElementById('issuesOpenCount').textContent = summary.open_total || 0;
+        document.getElementById('issuesUnownedCount').textContent = summary.unowned || 0;
+        row.style.display = 'flex';
+    }
+
+    timeAgo(isoString) {
+        const then = new Date(isoString).getTime();
+        if (Number.isNaN(then)) {
+            return isoString;
+        }
+        const minutes = Math.max(0, Math.floor((Date.now() - then) / 60000));
+        if (minutes < 1) {
+            return 'just now';
+        }
+        if (minutes < 60) {
+            return `${minutes}m ago`;
+        }
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) {
+            return `${hours}h ago`;
+        }
+        const days = Math.floor(hours / 24);
+        return days === 1 ? '1 day ago' : `${days} days ago`;
+    }
+
+    openDetail(index) {
+        const issue = (this.currentIssues || [])[index];
+        if (!issue) {
+            return;
+        }
+        const body = document.getElementById('issueDetailBody');
+        body.replaceChildren();
+
+        const info = issue.device_info || {};
+        const deviceRows = [
+            ['Owner', info.owner_email || 'Unassigned'],
+            ['Device', info.device_name || issue.device_guid || (issue.device && issue.device.guid) || 'N/A'],
+            ['Platform', info.platform || 'N/A'],
+            ['Model', info.model || 'N/A']
+        ];
+        body.appendChild(this.detailSection('Device', deviceRows));
+
+        const threatRows = Object.entries(issue)
+            .filter(([key, value]) => key !== 'device_info' && key !== 'device' && value !== null && value !== undefined && typeof value !== 'object')
+            .map(([key, value]) => [key.replace(/_/g, ' '), String(value)]);
+        body.appendChild(this.detailSection('Threat', threatRows));
+
+        const modal = new bootstrap.Modal(document.getElementById('issueDetailModal'));
+        modal.show();
+    }
+
+    detailSection(title, rows) {
+        const fragment = document.createDocumentFragment();
+        const heading = document.createElement('h6');
+        heading.className = 'text-muted text-uppercase small';
+        heading.textContent = title;
+        fragment.appendChild(heading);
+        const table = document.createElement('table');
+        table.className = 'table table-sm';
+        const tbody = document.createElement('tbody');
+        rows.forEach(([label, value]) => {
+            const row = document.createElement('tr');
+            const labelCell = document.createElement('th');
+            labelCell.scope = 'row';
+            labelCell.className = 'w-25 text-capitalize';
+            labelCell.textContent = label;
+            const valueCell = document.createElement('td');
+            valueCell.textContent = value;
+            row.appendChild(labelCell);
+            row.appendChild(valueCell);
+            tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+        fragment.appendChild(table);
+        return fragment;
+    }
+
+    async exportCsv() {
+        const params = new URLSearchParams();
+        params.set('limit', '500');
+        params.set('offset', '0');
+        Object.entries(this.currentFilters()).forEach(([key, value]) => {
+            params.set(key, value);
+        });
+
+        const button = document.getElementById('exportIssuesBtn');
+        button.disabled = true;
+        try {
+            const response = await fetch(`/api/issues?${params.toString()}`);
+            if (!response.ok) {
+                throw new Error(`Export failed: ${response.statusText}`);
+            }
+            const data = await response.json();
+            const rows = data.issues || [];
+            if (rows.length === 0) {
+                return;
+            }
+            const header = ['detected', 'risk', 'status', 'classification', 'threat_type', 'device', 'owner', 'platform', 'model', 'device_guid'];
+            const lines = [header.join(',')];
+            rows.forEach(issue => {
+                const info = issue.device_info || {};
+                const cells = [
+                    issue.detected_at || issue.created_time || '',
+                    issue.risk || '',
+                    issue.status || '',
+                    issue.classification || '',
+                    issue.type || '',
+                    info.device_name || '',
+                    info.owner_email || '',
+                    info.platform || '',
+                    info.model || '',
+                    issue.device_guid || (issue.device && issue.device.guid) || ''
+                ];
+                lines.push(cells.map(cell => this.csvCell(cell)).join(','));
+            });
+            const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
+            link.download = `issues-${stamp}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(link.href);
+        } catch (error) {
+            console.error('Issues export error:', error);
+            const alertBox = document.getElementById('issuesErrorAlert');
+            alertBox.textContent = error.message;
+            alertBox.style.display = 'block';
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    csvCell(value) {
+        const text = String(value == null ? '' : value);
+        if (/[",\n]/.test(text)) {
+            return `"${text.replace(/"/g, '""')}"`;
+        }
+        return text;
     }
 }
 

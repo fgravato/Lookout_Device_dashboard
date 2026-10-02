@@ -573,8 +573,38 @@
                                             </select>
                                         </div>
 
-                                        <button class="btn btn-primary w-100" id="refreshIssuesBtn">
+                                        <div class="mb-3">
+                                            <label class="form-label">Classification</label>
+                                            <select class="form-select" id="issueClassificationFilter">
+                                                <option value="">All Classifications</option>
+                                                <option value="MALWARE">Malware</option>
+                                                <option value="ROOT">Root</option>
+                                                <option value="SIDELOADED">Sideloaded</option>
+                                                <option value="OUT_OF_DATE">Out of Date</option>
+                                                <option value="VULNERABILITY">Vulnerability</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="form-label">Platform</label>
+                                            <select class="form-select" id="issuePlatformFilter">
+                                                <option value="">All Platforms</option>
+                                                <option value="ANDROID">Android</option>
+                                                <option value="IOS">iOS</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="form-label">Search</label>
+                                            <input type="search" class="form-control" id="issueQueryFilter"
+                                                   placeholder="Device, owner, threat…" autocomplete="off">
+                                        </div>
+
+                                        <button class="btn btn-primary w-100 mb-2" id="refreshIssuesBtn">
                                             <i class="fas fa-sync me-1"></i>Refresh Issues
+                                        </button>
+                                        <button class="btn btn-outline-secondary w-100" id="exportIssuesBtn">
+                                            <i class="fas fa-download me-1"></i>Export CSV
                                         </button>
                                     </div>
                                 </div>
@@ -594,7 +624,51 @@
 
                             <!-- Issue Results -->
                             <div class="col-md-9">
+                                <div class="alert alert-danger" id="issuesErrorAlert" style="display: none;" role="alert"></div>
+
+                                <div class="row g-2 mb-3" id="issuesSummaryRow" style="display: none;">
+                                    <div class="col-6 col-lg-3">
+                                        <div class="card border-danger">
+                                            <div class="card-body py-2 text-center">
+                                                <div class="fs-4 fw-bold text-danger" id="issuesOpenHighCount">0</div>
+                                                <div class="small text-muted">Open · High risk</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-lg-3">
+                                        <div class="card border-warning">
+                                            <div class="card-body py-2 text-center">
+                                                <div class="fs-4 fw-bold text-warning" id="issuesNewCount">0</div>
+                                                <div class="small text-muted">New · 24h</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-lg-3">
+                                        <div class="card">
+                                            <div class="card-body py-2 text-center">
+                                                <div class="fs-4 fw-bold" id="issuesOpenCount">0</div>
+                                                <div class="small text-muted">Open total</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-lg-3">
+                                        <div class="card">
+                                            <div class="card-body py-2 text-center">
+                                                <div class="fs-4 fw-bold" id="issuesUnownedCount">0</div>
+                                                <div class="small text-muted">No owner assigned</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div class="card" id="issuesTableCard" style="display: none;">
+                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                        <span class="text-muted small" id="issuesCountLine"></span>
+                                        <div class="btn-group btn-group-sm" role="group" aria-label="Issues pages">
+                                            <button class="btn btn-outline-secondary" id="issuesPrevBtn">‹ Prev</button>
+                                            <button class="btn btn-outline-secondary" id="issuesNextBtn">Next ›</button>
+                                        </div>
+                                    </div>
                                     <div class="card-body">
                                         <div class="table-responsive">
                                             <table class="table table-hover" id="issuesTable">
@@ -618,8 +692,20 @@
                                 <div class="card" id="issuesPlaceholder">
                                     <div class="card-body text-center py-5">
                                         <i class="fas fa-chart-pie fa-4x text-muted mb-3"></i>
-                                        <h5 class="text-muted">No Issues Loaded</h5>
-                                        <p class="text-muted">Click "Refresh Issues" to load fleet threats</p>
+                                        <h5 class="text-muted" id="issuesPlaceholderTitle">No Issues Loaded</h5>
+                                        <p class="text-muted" id="issuesPlaceholderText">Click "Refresh Issues" to load fleet threats</p>
+                                    </div>
+                                </div>
+
+                                <div class="modal fade" id="issueDetailModal" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog modal-lg">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Threat Details</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body" id="issueDetailBody"></div>
+                                        </div>
                                     </div>
                                 </div>
 

@@ -622,8 +622,74 @@ class TestCVERoutes:
     def test_get_cve_details_validates_format(self, client, app):
         """Test /api/cve/<name> validates CVE format"""
         response = client.get('/api/cve/INVALID-CVE')
-        
+
         assert response.status_code == 400
         data = response.get_json()
         assert 'error' in data
         assert 'INVALID_CVE_FORMAT' in data['error']['code']
+
+
+class TestIssuesRoutes:
+    """Test suite for Issues (threat) routes"""
+
+    def _mock_issue_service(self, app, threats):
+        from services.issue_service import IssueService
+        mock_client = MagicMock()
+        mock_client.is_authenticated.return_value = True
+        mock_client.get_threats.return_value = {'threats': threats}
+        app.extensions['device_cache'].get_device.return_value = None
+        app.extensions['issue_service'] = IssueService(
+            mock_client, app.extensions['device_cache']
+        )
+
+    def test_get_issues_returns_page_with_metadata(self, client, app):
+        """Test /api/issues returns paged threats plus total/limit/offset"""
+        threats = [
+            {'device_guid': 'g1', 'risk': 'HIGH', 'created_time': '2024-06-01T00:00:00Z'},
+            {'device_guid': 'g2', 'risk': 'LOW', 'created_time': '2024-01-01T00:00:00Z'},
+        ]
+        self._mock_issue_service(app, threats)
+
+        response = client.get('/api/issues?limit=1&offset=1')
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['total'] == 2
+        assert data['count'] == 1
+        assert data['limit'] == 1
+        assert data['offset'] == 1
+        assert data['issues'][0]['device_guid'] == 'g2'
+        assert 'device_info' in data['issues'][0]
+
+    def test_get_issues_clamps_oversized_limit(self, client, app):
+        """Test /api/issues caps limit at the service maximum"""
+        self._mock_issue_service(app, [{'device_guid': 'g1', 'risk': 'HIGH'}])
+
+        response = client.get('/api/issues?limit=9999')
+
+        assert response.status_code == 200
+        assert response.get_json()['limit'] == 500
+
+    def test_get_issues_refresh_bypasses_cache(self, client, app):
+        """Test /api/issues?refresh=1 invalidates cached threats"""
+        service = MagicMock()
+        service.get_issues.return_value = {
+            'issues': [], 'total': 0, 'limit': 50, 'offset': 0,
+            'summary': {'total': 0},
+        }
+        app.extensions['issue_service'] = service
+
+        response = client.get('/api/issues?refresh=1')
+
+        assert response.status_code == 200
+        service.invalidate_cache.assert_called_once_with()
+        assert response.get_json()['summary'] == {'total': 0}
+
+    def test_get_issues_unavailable_without_client(self, client, app):
+        """Test /api/issues returns 503 when no Lookout client exists"""
+        app.extensions['device_service'].get_lookout_client.return_value = None
+
+        response = client.get('/api/issues')
+
+        assert response.status_code == 503
+        assert response.get_json()['error']['code'] == 'ISSUE_SERVICE_UNAVAILABLE'
