@@ -246,6 +246,7 @@ All endpoints require authentication when `AUTH_ENABLED=true`, except `/health`.
 | `GET/POST` | `/api/cve/*` | CVE vulnerability scanning endpoints |
 | `GET/POST` | `/api/tenants/*` | Tenant management endpoints |
 | `GET` | `/api/cache/*` | Cache status and management |
+| `GET` | `/api/issues` | Fleet threats/issues (Lookout Threats API) with filtering and pagination |
 
 ### Query Parameters for Device Filtering
 
@@ -269,13 +270,15 @@ lookout-mra-dashboard-v1.0.0/
 │   ├── export.py           # Excel/CSV export endpoints
 │   ├── cve.py              # CVE scanning endpoints
 │   ├── tenants.py          # Multi-tenant management
-│   └── cache.py            # Cache status and control
+│   ├── cache.py            # Cache status and control
+│   └── issues.py           # Fleet threats/issues endpoints (Lookout Threats API)
 ├── services/               # Business logic layer
 │   ├── device_service.py   # Device fetching, caching, delta sync
 │   ├── risk_service.py     # Per-device risk analysis
 │   ├── export_service.py   # Excel/CSV generation
 │   ├── cve_service.py      # CVE vulnerability scanning
 │   ├── tenant_service.py   # Multi-tenant client management
+│   ├── issue_service.py    # Threat/issue fetching and filtering
 │   └── export/sheets/      # Excel sheet generators
 ├── utils/
 │   ├── device_filters.py   # Query-parameter filtering logic

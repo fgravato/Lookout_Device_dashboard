@@ -10,6 +10,7 @@ Handles all device-related business logic including:
 
 import json
 import logging
+import os
 import threading
 import time
 from datetime import datetime
@@ -136,14 +137,20 @@ class DeviceService:
     
     def _load_sample_data(self) -> List[Dict]:
         """Load sample data from file"""
+        sample_data_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'sample_data.json')
         try:
-            with open('sample_data.json', 'r') as f:
+            with open(sample_data_path, 'r') as f:
                 raw_devices = json.load(f)
             logger.info("Using sample data for development")
-            # Sample data is already mapped, so use as-is
+            # Sample data is already mapped, but lacks a device_id/guid; the
+            # cache requires one of these to key and store a device, so
+            # backfill from the (unique) device_name.
+            for device in raw_devices:
+                if not device.get('device_id') and not device.get('guid'):
+                    device['device_id'] = device.get('device_name')
             return raw_devices
         except FileNotFoundError:
-            logger.error("Sample data file not found")
+            logger.error(f"Sample data file not found at {sample_data_path}")
             raise Exception("Sample data file not found")
     
     def _fetch_from_all_tenants(self) -> List[Dict]:
@@ -267,13 +274,17 @@ class DeviceService:
     
     def _load_sample_data_fallback(self) -> List[Dict]:
         """Load sample data as fallback when API fails"""
+        sample_data_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'sample_data.json')
         try:
-            with open('sample_data.json', 'r') as f:
+            with open(sample_data_path, 'r') as f:
                 raw_devices = json.load(f)
+            for device in raw_devices:
+                if not device.get('device_id') and not device.get('guid'):
+                    device['device_id'] = device.get('device_name')
             logger.info("Fallback to sample data due to API error")
             return raw_devices
         except FileNotFoundError:
-            logger.error("Sample data file not found")
+            logger.error(f"Sample data file not found at {sample_data_path}")
             raise Exception("API unavailable and no sample data found")
     
     def _fetch_all_devices_efficiently(self, client: LookoutMRAClient) -> List[Dict]:
