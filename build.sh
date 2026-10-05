@@ -20,6 +20,7 @@ rsync -a \
     --exclude='.env' \
     --exclude='tenants.json' \
     --exclude='venv/' \
+    --exclude='.venv/' \
     --exclude='__pycache__/' \
     --exclude='*.pyc' \
     --exclude='dashboard.log' \
@@ -40,8 +41,8 @@ rsync -a \
 tar -czf "${ARCHIVE_PATH}" -C "${STAGE_ROOT}" "${ARCHIVE_NAME}"
 
 echo "Running safety check for secrets/build artifacts in archive..."
-if tar -tzf "${ARCHIVE_PATH}" | grep -E '\.env$|tenants\.json$|venv/|__pycache__|\.git/|tests/|setup\.cfg|\.claude/|\.mypy_cache/|\.pytest_cache/|\.DS_Store$'; then
-    echo "ERROR: Archive contains files that should never ship (.env, tenants.json, venv/, __pycache__, .git/, tests/, setup.cfg, .claude/, .mypy_cache/, .pytest_cache/, or .DS_Store). Aborting build." >&2
+if tar -tzf "${ARCHIVE_PATH}" | grep -E '\.env$|tenants\.json$|\.venv/|venv/|__pycache__|\.git/|tests/|setup\.cfg|\.claude/|\.mypy_cache/|\.pytest_cache/|\.DS_Store$'; then
+    echo "ERROR: Archive contains files that should never ship (.env, tenants.json, venv/, .venv/, __pycache__, .git/, tests/, setup.cfg, .claude/, .mypy_cache/, .pytest_cache/, or .DS_Store). Aborting build." >&2
     exit 1
 fi
 
