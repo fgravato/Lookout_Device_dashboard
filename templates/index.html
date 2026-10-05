@@ -31,6 +31,7 @@
                         type="button" role="tab">
                         <i class="fas fa-mobile-alt"></i>
                         <span>Devices</span>
+                        <span class="badge bg-danger nav-badge" id="devicesNavBadge" style="display: none;"></span>
                     </a>
                 </li>
                 <li>
@@ -45,12 +46,7 @@
                         type="button" role="tab">
                         <i class="fas fa-chart-pie"></i>
                         <span>Issues</span>
-                    </a>
-                </li>
-                <li>
-                    <a class="sidebar-link sidebar-grayed" href="#">
-                        <i class="fas fa-th"></i>
-                        <span>Apps</span>
+                        <span class="badge bg-danger nav-badge" id="issuesNavBadge" style="display: none;"></span>
                     </a>
                 </li>
             </ul>
@@ -237,7 +233,7 @@
                             <div class="col-md-9">
                                 <!-- Stats Cards -->
                                 <div class="row mb-4">
-                                    <div class="col-md-3">
+                                    <div class="col-md">
                                         <div class="card text-center stats-card" data-filter="all" role="button"
                                             tabindex="0" title="Click to show all devices">
                                             <div class="card-body">
@@ -246,7 +242,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="col-md-3">
+                                    <div class="col-md">
                                         <div class="card text-center stats-card" data-filter="low" role="button"
                                             tabindex="0" title="Click to show secure/low risk devices">
                                             <div class="card-body">
@@ -255,7 +251,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="col-md-3">
+                                    <div class="col-md">
                                         <div class="card text-center stats-card" data-filter="medium" role="button"
                                             tabindex="0" title="Click to show medium risk devices">
                                             <div class="card-body">
@@ -264,12 +260,21 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="col-md-3">
+                                    <div class="col-md">
                                         <div class="card text-center stats-card" data-filter="high" role="button"
                                             tabindex="0" title="Click to show high/critical risk devices">
                                             <div class="card-body">
                                                 <h5 class="card-title text-danger" id="highRisk">-</h5>
                                                 <p class="card-text text-muted">High/Critical Risk</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md">
+                                        <div class="card text-center stats-card" data-filter="unknown" role="button"
+                                            tabindex="0" title="Click to show devices with unknown risk (never assessed)">
+                                            <div class="card-body">
+                                                <h5 class="card-title text-secondary" id="unknownRisk">-</h5>
+                                                <p class="card-text text-muted">Unknown Risk</p>
                                             </div>
                                         </div>
                                     </div>
@@ -310,17 +315,11 @@
                                                         <th class="sortable" data-sort="last_checkin">
                                                             Last Check-in <i class="fas fa-sort sort-icon"></i>
                                                         </th>
-                                                        <th class="sortable" data-sort="days_since_checkin">
-                                                            Days Since <i class="fas fa-sort sort-icon"></i>
-                                                        </th>
                                                         <th class="sortable" data-sort="os_version">
                                                             OS Version <i class="fas fa-sort sort-icon"></i>
                                                         </th>
                                                         <th class="sortable" data-sort="security_patch_level">
                                                             Security Patch <i class="fas fa-sort sort-icon"></i>
-                                                        </th>
-                                                        <th class="sortable" data-sort="compliance_status">
-                                                            Connection Status <i class="fas fa-sort sort-icon"></i>
                                                         </th>
                                                         <th id="mdmColumnHeader" style="display: none;">
                                                             Tenant / MDM
@@ -329,7 +328,7 @@
                                                 </thead>
                                                 <tbody id="devicesTableBody">
                                                     <tr>
-                                                        <td colspan="11" class="text-center">
+                                                        <td colspan="9" class="text-center">
                                                             <div class="spinner-border text-primary" role="status">
                                                                 <span class="visually-hidden">Loading...</span>
                                                             </div>

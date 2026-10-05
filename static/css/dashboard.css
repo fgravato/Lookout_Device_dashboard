@@ -114,17 +114,14 @@ body {
     border-left-color: var(--brand-green);
 }
 
-.sidebar-link.sidebar-grayed {
-    color: rgba(255, 255, 255, 0.25) !important;
-    cursor: default !important;
-    pointer-events: none !important;
-    opacity: 0.5;
-}
-
 .sidebar-link i {
     width: 24px;
     margin-right: 10px;
     text-align: center;
+}
+
+.sidebar-link .nav-badge {
+    margin-left: auto;
 }
 
 .sidebar-footer {
@@ -337,6 +334,10 @@ body {
 .risk-high,
 .risk-critical {
     color: var(--risk-high) !important;
+}
+
+.risk-unknown {
+    color: #6c757d !important;
 }
 
 /* Status Indicators */

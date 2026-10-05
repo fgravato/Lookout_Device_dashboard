@@ -199,6 +199,14 @@ class Dashboard {
             this.updateStats();
             this.renderDevices();
 
+            // Triage-first: highest risk on top until the user picks a sort
+            // (unknown risk sorts last, so unenrolled devices don't bury signal)
+            if (!this.initialSortDone && !this.groupedView) {
+                this.initialSortDone = true;
+                this.sortDevices('risk_level');
+                this.sortDevices('risk_level');
+            }
+
             // Update cache info display
             this.updateCacheInfo(data.cache_info);
 
@@ -207,6 +215,7 @@ class Dashboard {
             this.showError('Failed to load device data. Please try again.');
         } finally {
             this.showLoading(false);
+            refreshNavBadges();
         }
     }
 
@@ -519,6 +528,9 @@ class Dashboard {
                 return riskLevel === 'medium';
             case 'high':
                 return riskLevel === 'high' || riskLevel === 'critical';
+            case 'unknown':
+                return riskLevel !== 'secure' && riskLevel !== 'low' &&
+                    riskLevel !== 'medium' && riskLevel !== 'high' && riskLevel !== 'critical';
             case 'all':
             default:
                 return true;
@@ -711,11 +723,13 @@ class Dashboard {
         const highRisk = this.filteredDevices.filter(d =>
             d.risk_level.toLowerCase() === 'high' || d.risk_level.toLowerCase() === 'critical'
         ).length;
+        const unknownRisk = total - lowRisk - mediumRisk - highRisk;
 
         document.getElementById('totalDevices').textContent = total;
         document.getElementById('lowRisk').textContent = lowRisk;
         document.getElementById('mediumRisk').textContent = mediumRisk;
         document.getElementById('highRisk').textContent = highRisk;
+        document.getElementById('unknownRisk').textContent = unknownRisk;
     }
 
     renderDevices() {
@@ -726,7 +740,7 @@ class Dashboard {
 
         const tbody = document.getElementById('devicesTableBody');
         const hasMdmColumn = this.multiTenantEnabled || (this.devices && this.devices.some(d => d.mdm_connector_id || d.mdm_type));
-        const colspan = hasMdmColumn ? "11" : "10";
+        const colspan = hasMdmColumn ? "9" : "8";
 
         if (this.filteredDevices.length === 0) {
             tbody.innerHTML = `
@@ -745,7 +759,6 @@ class Dashboard {
         tbody.innerHTML = this.filteredDevices.map(device => {
             const daysSince = device.days_since_checkin !== undefined ? device.days_since_checkin : this.calculateDaysSince(device.last_checkin);
             const riskClass = `risk-${device.risk_level.toLowerCase()}`;
-            const complianceIcon = this.getComplianceIcon(device.compliance_status);
             const activeIssues = device.active_issues_count || 0;
             const issuesClass = activeIssues > 0 ? (activeIssues >= 3 ? 'text-danger fw-bold' : 'text-warning fw-bold') : 'text-success';
 
@@ -775,38 +788,21 @@ class Dashboard {
                     <td>
                         <span class="${issuesClass}">${activeIssues}</span>
                     </td>
-                    <td>${device.last_checkin !== 'Never' ? this.formatDate(device.last_checkin) : 'Never'}</td>
                     <td>
-                        ${daysSince >= 0 ? `${daysSince} days` : 'Never'}
+                        ${device.last_checkin !== 'Never' ? this.formatDate(device.last_checkin) : 'Never'}
+                        ${daysSince >= 0 ? `<br><small class="text-muted">${daysSince} days ago</small>` : ''}
                         <br>${connectionStatusHtml}
                     </td>
                     <td>${this.escapeHtml(device.os_version)}</td>
                     <td>
                         ${device.security_patch_level ? this.escapeHtml(device.security_patch_level) : 'N/A'}
                     </td>
-                    <td>
-                        <i class="${complianceIcon}"></i>
-                        ${this.escapeHtml(device.compliance_status)}
-                    </td>
                     ${hasMdmColumn ? `
-                    <td>
+                    <td title="${this.mdmCellTitle(device)}">
                         <div class="d-flex flex-column">
-                            ${device.tenant_name ? `<div class="mb-1"><i class="fas fa-building me-1 text-muted"></i><small class="fw-bold">${this.escapeHtml(device.tenant_name)}</small></div>` : ''}
-                            
+                            ${device.tenant_name ? `<div><i class="fas fa-building me-1 text-muted"></i><small class="fw-bold">${this.escapeHtml(device.tenant_name)}</small></div>` : ''}
                             ${this.getMdmBrandBadge(device.mdm_type)}
-                            
-                            ${!device.mdm_type && device.mdm_provider ? `<div class="mb-1"><i class="fas fa-server me-1 text-muted"></i><small>${this.escapeHtml(device.mdm_provider)}</small></div>` : ''}
-                            
-                            ${device.mdm_connector_id ? `
-                                <div class="text-muted" style="font-size: 0.75rem; line-height: 1.2;">
-                                    <span class="d-block">ID: ${this.escapeHtml(device.mdm_connector_id)}</span>
-                                </div>
-                            ` : ''}
-                            ${device.external_id ? `
-                                <div class="text-muted" style="font-size: 0.75rem; line-height: 1.2;">
-                                    <span class="d-block text-truncate" style="max-width: 120px;" title="${this.escapeHtml(device.external_id)}">Ext: ${this.escapeHtml(device.external_id)}</span>
-                                </div>
-                            ` : ''}
+                            ${!device.mdm_type && device.mdm_provider ? `<div><i class="fas fa-server me-1 text-muted"></i><small>${this.escapeHtml(device.mdm_provider)}</small></div>` : ''}
                         </div>
                     </td>
                     ` : ''}
@@ -821,7 +817,7 @@ class Dashboard {
     renderDeviceGroups() {
         const tbody = document.getElementById('devicesTableBody');
         const hasMdmColumn = this.multiTenantEnabled || (this.devices && this.devices.some(d => d.mdm_connector_id));
-        const colspan = hasMdmColumn ? "11" : "10";
+        const colspan = hasMdmColumn ? "9" : "8";
 
         if (Object.keys(this.deviceGroups).length === 0) {
             tbody.innerHTML = `
@@ -864,7 +860,6 @@ class Dashboard {
                             ${groupData.devices.map(device => {
                 const daysSince = device.days_since_checkin !== undefined ? device.days_since_checkin : this.calculateDaysSince(device.last_checkin);
                 const riskClass = `risk-${device.risk_level.toLowerCase()}`;
-                const complianceIcon = this.getComplianceIcon(device.compliance_status);
                 const activeIssues = device.active_issues_count || 0;
                 const issuesClass = activeIssues > 0 ? (activeIssues >= 3 ? 'text-danger fw-bold' : 'text-warning fw-bold') : 'text-success';
 
@@ -896,26 +891,20 @@ class Dashboard {
                                             <div class="col-md-1">
                                                 <span class="${issuesClass}">${activeIssues}</span>
                                             </div>
-                                            <div class="col-md-1">${device.last_checkin !== 'Never' ? this.formatDate(device.last_checkin) : 'Never'}</div>
-                                            <div class="col-md-1">
-                                                ${daysSince >= 0 ? `${daysSince} days` : 'Never'}
+                                            <div class="col-md-2">
+                                                ${device.last_checkin !== 'Never' ? this.formatDate(device.last_checkin) : 'Never'}
+                                                ${daysSince >= 0 ? `<br><small class="text-muted">${daysSince} days ago</small>` : ''}
                                                 <br>${connectionStatusHtml}
                                             </div>
                                             <div class="col-md-1">${this.escapeHtml(device.os_version)}</div>
                                             <div class="col-md-1">
                                                 ${device.security_patch_level ? this.escapeHtml(device.security_patch_level) : 'N/A'}
                                             </div>
-                                            <div class="col-md-1">
-                                                <i class="${complianceIcon}"></i>
-                                                ${this.escapeHtml(device.compliance_status)}
-                                            </div>
                                             ${hasMdmData ? `
-                                            <div class="col-md-2">
+                                            <div class="col-md-2" title="${this.mdmCellTitle(device)}">
                                                 <small class="text-muted">
                                                     ${device.tenant_name ? `<i class="fas fa-building me-1"></i>${this.escapeHtml(device.tenant_name)}<br>` : ''}
-                                                    ${device.mdm_provider ? `<i class="fas fa-server me-1"></i>${this.escapeHtml(device.mdm_provider)}<br>` : ''}
-                                                    ${device.mdm_connector_id ? `<strong>MDM:</strong> ${this.escapeHtml(device.mdm_connector_id)}<br>` : ''}
-                                                    ${device.external_id ? `<strong>Ext ID:</strong> ${this.escapeHtml(device.external_id)}` : ''}
+                                                    ${device.mdm_provider ? `<i class="fas fa-server me-1"></i>${this.escapeHtml(device.mdm_provider)}` : ''}
                                                 </small>
                                             </div>
                                             ` : ''}
@@ -1063,19 +1052,6 @@ class Dashboard {
             'macos': 'apple'
         };
         return icons[platform.toLowerCase()] || 'desktop';
-    }
-
-    getComplianceIcon(status) {
-        switch (status.toLowerCase()) {
-            case 'connected':
-                return 'fas fa-check-circle text-success';
-            case 'disconnected':
-                return 'fas fa-times-circle text-danger';
-            case 'pending':
-                return 'fas fa-clock text-warning';
-            default:
-                return 'fas fa-question-circle text-muted';
-        }
     }
 
     escapeHtml(text) {
@@ -1552,6 +1528,23 @@ class Dashboard {
                 </span>
             </div>
         `;
+    }
+
+    mdmCellTitle(device) {
+        const parts = [];
+        if (device.tenant_name) {
+            parts.push(`Tenant: ${device.tenant_name}`);
+        }
+        if (device.mdm_provider) {
+            parts.push(`Provider: ${device.mdm_provider}`);
+        }
+        if (device.mdm_connector_id) {
+            parts.push(`Connector ID: ${device.mdm_connector_id}`);
+        }
+        if (device.external_id) {
+            parts.push(`External ID: ${device.external_id}`);
+        }
+        return this.escapeHtml(parts.join(' | '));
     }
 
     formatDateTime(dateString) {
@@ -2619,6 +2612,7 @@ class IssuesManager {
             alertBox.style.display = 'block';
         } finally {
             document.getElementById('refreshIssuesBtn').disabled = false;
+            refreshNavBadges();
         }
     }
 
@@ -2876,11 +2870,82 @@ class IssuesManager {
 let cveScanner;
 let issuesManager;
 
+// Sidebar attention badges: show counts only when something needs triage
+function setNavBadge(id, count) {
+    const badge = document.getElementById(id);
+    if (!badge) {
+        return;
+    }
+    if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : String(count);
+        badge.style.display = '';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+async function refreshNavBadges() {
+    try {
+        const issuesResponse = await fetch('/api/issues?limit=1&status=OPEN');
+        if (issuesResponse.ok) {
+            const data = await issuesResponse.json();
+            const summary = data.summary || {};
+            setNavBadge('issuesNavBadge', summary.open_high || 0);
+        }
+    } catch (error) {
+        console.error('Nav badge issues check failed:', error);
+    }
+    try {
+        const groupsResponse = await fetch('/api/devices/groups');
+        if (groupsResponse.ok) {
+            const data = await groupsResponse.json();
+            const highRisk = (data.groups && data.groups.high_risk && data.groups.high_risk.devices) || [];
+            setNavBadge('devicesNavBadge', highRisk.length);
+        }
+    } catch (error) {
+        console.error('Nav badge devices check failed:', error);
+    }
+}
+
+// Deep-linkable tabs: #devices, #vulnerabilities, #issues
+const NAV_TAB_HASHES = {
+    '#devices': 'devices',
+    '#cve-scanner': 'vulnerabilities',
+    '#issues': 'issues'
+};
+const NAV_HASH_TABS = {
+    devices: 'devices-tab',
+    vulnerabilities: 'cve-tab',
+    issues: 'issues-tab'
+};
+
+function activateTabFromHash() {
+    const tabId = NAV_HASH_TABS[window.location.hash.replace('#', '')];
+    if (!tabId) {
+        return;
+    }
+    const trigger = document.getElementById(tabId);
+    if (trigger) {
+        bootstrap.Tab.getOrCreateInstance(trigger).show();
+    }
+}
+
 // Initialize dashboard when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.dashboard = new Dashboard();
     cveScanner = new CVEScanner();
     issuesManager = new IssuesManager();
+    const sidebarTabs = document.getElementById('sidebarTabs');
+    if (sidebarTabs) {
+        sidebarTabs.addEventListener('shown.bs.tab', (event) => {
+            const name = NAV_TAB_HASHES[event.target.getAttribute('data-bs-target') || ''];
+            if (name) {
+                window.location.hash = name;
+            }
+        });
+    }
+    activateTabFromHash();
+    refreshNavBadges();
 });
 
 // Handle page visibility change for auto-refresh
